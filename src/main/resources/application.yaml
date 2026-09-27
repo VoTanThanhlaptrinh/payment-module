@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: payment
+
+  # PostgreSQL & JPA Configuration
+  datasource:
+    url: jdbc:postgresql://localhost:5432/payment
+    username: postgres
+    password: 204863
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # Redis Configuration
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      # password: password_redis_if_any
+
+  # RabbitMQ Configuration
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
