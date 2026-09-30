@@ -8,6 +8,7 @@ import com.thanh.payment.application.mapper.PaymentMapper;
 import com.thanh.payment.application.port.in.CreatePaymentUseCase;
 import com.thanh.payment.application.port.in.ProcessTransactionUseCase;
 import com.thanh.payment.application.port.in.RefundUseCase;
+import com.thanh.payment.application.port.out.PaymentProvider;
 import com.thanh.payment.domain.model.Payment;
 import com.thanh.payment.domain.model.PaymentStatus;
 import com.thanh.payment.domain.repository.PaymentRepository;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PaymentService implements CreatePaymentUseCase, ProcessTransactionUseCase, RefundUseCase {
 
     private final PaymentRepository paymentRepository;
+    private final PaymentProviderFactory paymentProviderFactory;
 
     @Override
     @Transactional
@@ -43,6 +45,10 @@ public class PaymentService implements CreatePaymentUseCase, ProcessTransactionU
         );
 
         Payment savedPayment = paymentRepository.save(payment);
+
+        PaymentProvider provider = paymentProviderFactory.getProvider(command.getMethod());
+        provider.processPayment(savedPayment);
+
         return PaymentMapper.toResponseDTO(savedPayment);
     }
 
