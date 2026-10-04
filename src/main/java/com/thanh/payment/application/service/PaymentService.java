@@ -11,6 +11,8 @@ import com.thanh.payment.application.port.in.ProcessTransactionUseCase;
 import com.thanh.payment.application.port.in.RefundUseCase;
 import com.thanh.payment.application.port.in.VerifyWebhookUseCase;
 import com.thanh.payment.application.port.out.PaymentProvider;
+import com.thanh.payment.application.port.out.ProviderCheckoutRequest;
+import com.thanh.payment.application.port.out.ProviderCheckoutResult;
 import com.thanh.payment.domain.model.Payment;
 import com.thanh.payment.domain.model.PaymentMethodType;
 import com.thanh.payment.domain.model.PaymentStatus;
@@ -78,9 +80,19 @@ public class PaymentService implements CreatePaymentUseCase, ProcessTransactionU
         transactionRepository.save(chargeTx);
 
         PaymentProvider provider = paymentProviderFactory.getProvider(method);
-        provider.processPayment(payment);
+        
+        ProviderCheckoutRequest req = ProviderCheckoutRequest.builder()
+                .paymentId(payment.getId())
+                .transactionId(chargeTx.getId())
+                .orderId(payment.getOrderId())
+                .amount(payment.getTotalAmount())
+                .createdAt(payment.getCreatedAt())
+                .expiresAt(chargeTx.getExpiredAt())
+                .build();
 
-        return PaymentMapper.toResponseDTO(payment);
+        ProviderCheckoutResult result = provider.processPayment(req);
+
+        return PaymentMapper.toResponseDTO(payment, result);
     }
 
     @Override

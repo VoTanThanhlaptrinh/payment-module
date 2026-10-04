@@ -19,4 +19,7 @@ public class PaymentResponse {
     private final PaymentMethodType method;
     private final PaymentStatus status;
     private final OffsetDateTime createdAt;
+    private final String transactionId;
+    private final String checkoutUrl;
+    private final OffsetDateTime expiresAt;
 }

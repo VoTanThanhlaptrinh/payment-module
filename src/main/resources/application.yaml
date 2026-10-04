@@ -30,3 +30,15 @@ spring:
     port: 5672
     username: guest
     password: guest
+
+  # Payment Providers
+payment:
+  providers:
+    vnpay:
+      enabled: true
+      payment-url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
+      return-url: http://localhost:8080/api/v1/payments/webhook/vnpay/return
+      tmn-code: VNPAY_MOCK_TMN
+      hash-secret: VNPAY_MOCK_SECRET
+      version: 2.1.0
+      expiry-minutes: 15

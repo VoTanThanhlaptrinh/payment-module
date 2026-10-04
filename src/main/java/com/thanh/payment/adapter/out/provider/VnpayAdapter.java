@@ -7,8 +7,18 @@ import com.thanh.payment.domain.model.Payment;
 import com.thanh.payment.domain.model.PaymentMethodType;
 import org.springframework.stereotype.Component;
 
+import com.thanh.payment.application.port.out.ProviderCheckoutRequest;
+import com.thanh.payment.application.port.out.ProviderCheckoutResult;
+import com.thanh.payment.adapter.out.provider.config.VnpayProperties;
+import lombok.RequiredArgsConstructor;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+
 @Component
+@RequiredArgsConstructor
+@EnableConfigurationProperties(VnpayProperties.class)
 public class VnpayAdapter implements PaymentProvider {
+
+    private final VnpayProperties properties;
 
     @Override
     public PaymentMethodType getSupportedType() {
@@ -16,8 +26,17 @@ public class VnpayAdapter implements PaymentProvider {
     }
 
     @Override
-    public void processPayment(Payment payment) {
-        // TODO: Implement VNPay API call
+    public ProviderCheckoutResult processPayment(ProviderCheckoutRequest request) {
+        if (!properties.isEnabled()) {
+            throw new IllegalStateException("VNPAY provider is disabled");
+        }
+        
+        // TODO: Implement VNPay API call for real URL later
+        return ProviderCheckoutResult.builder()
+                .transactionId(String.valueOf(request.getTransactionId()))
+                .checkoutUrl("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?dummy=1")
+                .expiresAt(request.getExpiresAt())
+                .build();
     }
 
     @Override

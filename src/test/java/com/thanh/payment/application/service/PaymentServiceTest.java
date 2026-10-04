@@ -64,11 +64,18 @@ class PaymentServiceTest {
         when(paymentRepository.findByOrderIdAndStatus(101L, PaymentStatus.PENDING)).thenReturn(Optional.empty());
         when(paymentRepository.save(any(Payment.class))).thenReturn(savedPayment);
 
+        com.thanh.payment.application.port.out.ProviderCheckoutResult mockResult = com.thanh.payment.application.port.out.ProviderCheckoutResult.builder()
+                .checkoutUrl("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html")
+                .transactionId("tx-123")
+                .build();
+        when(paymentProvider.processPayment(any())).thenReturn(mockResult);
+
         PaymentResponse response = paymentService.createPayment(command);
 
         assertNotNull(response);
         assertEquals(1L, response.getId());
         assertEquals(101L, response.getOrderId());
+        assertEquals("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html", response.getCheckoutUrl());
 
         ArgumentCaptor<Transaction> txCaptor = ArgumentCaptor.forClass(Transaction.class);
         verify(transactionRepository, times(1)).save(txCaptor.capture());
@@ -81,7 +88,7 @@ class PaymentServiceTest {
         assertNotNull(capturedTx.getExpiredAt());
         assertTrue(capturedTx.getExpiredAt().isAfter(OffsetDateTime.now()));
 
-        verify(paymentProvider, times(1)).processPayment(savedPayment);
+        verify(paymentProvider, times(1)).processPayment(any());
     }
 
     @Test
@@ -149,12 +156,18 @@ class PaymentServiceTest {
         when(paymentRepository.findByOrderIdAndStatus(104L, PaymentStatus.PENDING)).thenReturn(Optional.of(existingPayment));
         when(transactionRepository.findPendingChargeByPaymentId(4L)).thenReturn(Optional.empty());
 
+        com.thanh.payment.application.port.out.ProviderCheckoutResult mockResult = com.thanh.payment.application.port.out.ProviderCheckoutResult.builder()
+                .checkoutUrl("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html")
+                .transactionId("tx-456")
+                .build();
+        when(paymentProvider.processPayment(any())).thenReturn(mockResult);
+
         PaymentResponse response = paymentService.createPayment(command);
 
         assertNotNull(response);
         assertEquals(4L, response.getId());
         verify(transactionRepository, times(1)).save(any(Transaction.class));
-        verify(paymentProvider, times(1)).processPayment(existingPayment);
+        verify(paymentProvider, times(1)).processPayment(any());
     }
 
     @Test

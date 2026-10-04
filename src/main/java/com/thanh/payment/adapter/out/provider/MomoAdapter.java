@@ -7,6 +7,9 @@ import com.thanh.payment.domain.model.Payment;
 import com.thanh.payment.domain.model.PaymentMethodType;
 import org.springframework.stereotype.Component;
 
+import com.thanh.payment.application.port.out.ProviderCheckoutRequest;
+import com.thanh.payment.application.port.out.ProviderCheckoutResult;
+
 @Component
 public class MomoAdapter implements PaymentProvider {
 
@@ -16,8 +19,8 @@ public class MomoAdapter implements PaymentProvider {
     }
 
     @Override
-    public void processPayment(Payment payment) {
-        // TODO: Implement Momo API call
+    public ProviderCheckoutResult processPayment(ProviderCheckoutRequest request) {
+        throw new UnsupportedOperationException("MOMO provider is not enabled");
     }
 
     @Override

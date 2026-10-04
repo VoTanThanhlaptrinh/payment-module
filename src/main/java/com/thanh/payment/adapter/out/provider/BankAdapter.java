@@ -3,9 +3,11 @@ package com.thanh.payment.adapter.out.provider;
 import com.thanh.payment.application.dto.PaymentVerificationResult;
 import com.thanh.payment.application.dto.webhook.BankWebhookRequest;
 import com.thanh.payment.application.port.out.PaymentProvider;
-import com.thanh.payment.domain.model.Payment;
 import com.thanh.payment.domain.model.PaymentMethodType;
 import org.springframework.stereotype.Component;
+
+import com.thanh.payment.application.port.out.ProviderCheckoutRequest;
+import com.thanh.payment.application.port.out.ProviderCheckoutResult;
 
 @Component
 public class BankAdapter implements PaymentProvider {
@@ -16,8 +18,8 @@ public class BankAdapter implements PaymentProvider {
     }
 
     @Override
-    public void processPayment(Payment payment) {
-        // TODO: Implement Bank Transfer API call
+    public ProviderCheckoutResult processPayment(ProviderCheckoutRequest request) {
+        throw new UnsupportedOperationException("BANK_TRANSFER provider is not enabled");
     }
 
     @Override
