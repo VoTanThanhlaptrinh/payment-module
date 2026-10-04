@@ -47,7 +47,9 @@ public class VnpayAdapter implements PaymentProvider {
                 .isSignatureValid(isSignatureValid)
                 .isSuccess(isSuccess)
                 .orderId(orderId)
-                .transactionId(request.getVnp_TransactionNo())
+                .transactionId(request.getVnp_TxnRef())
+                .providerTransactionId(request.getVnp_TransactionNo())
+                .failureReason(!isSuccess ? "VNPay response code: " + request.getVnp_ResponseCode() : null)
                 .build();
     }
 }
