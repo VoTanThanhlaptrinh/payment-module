@@ -4,10 +4,10 @@ spring:
 
   # PostgreSQL & JPA Configuration
   datasource:
-    url: jdbc:postgresql://localhost:5432/payment
-    username: postgres
-    password: 204863
-    driver-class-name: org.postgresql.Driver
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/payment}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:204863}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.postgresql.Driver}
   jpa:
     hibernate:
       ddl-auto: update
@@ -20,25 +20,25 @@ spring:
   # Redis Configuration
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
       # password: password_redis_if_any
 
   # RabbitMQ Configuration
   rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
 
   # Payment Providers
 payment:
   providers:
     vnpay:
-      enabled: true
-      payment-url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
-      return-url: http://localhost:8080/api/v1/payments/webhook/vnpay/return
-      tmn-code: VNPAY_MOCK_TMN
-      hash-secret: VNPAY_MOCK_SECRET
-      version: 2.1.0
-      expiry-minutes: 15
+      enabled: ${VNPAY_ENABLED:true}
+      payment-url: ${VNPAY_PAYMENT_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+      return-url: ${VNPAY_RETURN_URL:http://localhost:8080/api/v1/payments/webhook/vnpay/return}
+      tmn-code: ${VNPAY_TMN_CODE:VNPAY_MOCK_TMN}
+      hash-secret: ${VNPAY_HASH_SECRET:VNPAY_MOCK_SECRET}
+      version: ${VNPAY_VERSION:2.1.0}
+      expiry-minutes: ${VNPAY_EXPIRY_MINUTES:15}

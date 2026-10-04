@@ -68,10 +68,13 @@
 			<artifactId>lombok</artifactId>
 			<optional>true</optional>
 		</dependency>
+		<!-- Source:
+		https://mvnrepository.com/artifact/io.hypersistence/hypersistence-utils-hibernate-73 -->
 		<dependency>
 			<groupId>io.hypersistence</groupId>
-			<artifactId>hypersistence-utils-hibernate-63</artifactId>
+			<artifactId>hypersistence-utils-hibernate-73</artifactId>
 			<version>3.16.0</version>
+			<scope>compile</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
