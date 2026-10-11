@@ -1,44 +1,44 @@
 spring:
   application:
     name: payment
-
-  # PostgreSQL & JPA Configuration
-  datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/payment}
-    username: ${SPRING_DATASOURCE_USERNAME:postgres}
-    password: ${SPRING_DATASOURCE_PASSWORD:204863}
-    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.postgresql.Driver}
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-
-  # Redis Configuration
   data:
     redis:
-      host: ${SPRING_DATA_REDIS_HOST:localhost}
-      port: ${SPRING_DATA_REDIS_PORT:6379}
-      # password: password_redis_if_any
-
-  # RabbitMQ Configuration
-  rabbitmq:
-    host: ${SPRING_RABBITMQ_HOST:localhost}
-    port: ${SPRING_RABBITMQ_PORT:5672}
-    username: ${SPRING_RABBITMQ_USERNAME:guest}
-    password: ${SPRING_RABBITMQ_PASSWORD:guest}
-
-  # Payment Providers
+      timeout: 300ms        # Redis treo thì request lỗi nhanh (503) thay vì treo theo
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+    clean-disabled: true
 payment:
+  idempotency:
+    in-progress-ttl: 30s    # key đang xử lý tự hết hạn nếu instance chết giữa chừng
+    completed-ttl: 24h      # đã tạo thanh toán thành công: request lặp lại nhận kết quả cũ
+    max-processing-time-seconds: 10   # timeout transaction tạo payment; in-progress-ttl phải >= 2 lần giá trị này
   providers:
     vnpay:
-      enabled: ${VNPAY_ENABLED:true}
-      payment-url: ${VNPAY_PAYMENT_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
-      return-url: ${VNPAY_RETURN_URL:http://localhost:8080/api/v1/payments/webhook/vnpay/return}
-      tmn-code: ${VNPAY_TMN_CODE:VNPAY_MOCK_TMN}
-      hash-secret: ${VNPAY_HASH_SECRET:VNPAY_MOCK_SECRET}
-      version: ${VNPAY_VERSION:2.1.0}
-      expiry-minutes: ${VNPAY_EXPIRY_MINUTES:15}
+      enabled: false
+      payment-url: ""
+      return-url: ""
+      ipn-url: ""
+      tmn-code: ""
+      hash-secret: ""
+      version: "2.1.0"
+      expiry-minutes: 15
+      query-api-url: ""
+      merchant-ip: ""
+      reconciliation-enabled: false
+      reconciliation-initial-delay: 30s
+      reconciliation-interval: 5m
+      reconciliation-not-found-grace: 5m   # QueryDR báo 91 sau expired_at + khoảng này thì chuyển giao dịch sang EXPIRED
+      reconciliation-max-attempts: 12
+      reconciliation-batch-size: 50
+      query-connect-timeout: 3s
+      query-read-timeout: 5s

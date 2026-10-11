@@ -1,0 +1,39 @@
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/payment}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
+
+payment:
+  providers:
+    vnpay:
+      enabled: ${VNPAY_ENABLED:false}
+      payment-url: ${VNPAY_PAYMENT_URL:}
+      return-url: ${VNPAY_RETURN_URL:}
+      ipn-url: ${VNPAY_IPN_URL:}
+      tmn-code: ${VNPAY_TMN_CODE:}
+      hash-secret: ${VNPAY_HASH_SECRET:}
+      version: ${VNPAY_VERSION:2.1.0}
+      expiry-minutes: ${VNPAY_EXPIRY_MINUTES:15}
+      query-api-url: ${VNPAY_QUERY_API_URL:https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
+      merchant-ip: ${VNPAY_MERCHANT_IP:}
+      reconciliation-enabled: ${VNPAY_RECONCILIATION_ENABLED:false}
+      reconciliation-initial-delay: ${VNPAY_RECONCILIATION_INITIAL_DELAY:30s}
+      reconciliation-interval: ${VNPAY_RECONCILIATION_INTERVAL:5m}
+      reconciliation-not-found-grace: ${VNPAY_RECONCILIATION_NOT_FOUND_GRACE:5m}
+      reconciliation-max-attempts: ${VNPAY_RECONCILIATION_MAX_ATTEMPTS:12}
+      reconciliation-batch-size: ${VNPAY_RECONCILIATION_BATCH_SIZE:50}
+      query-connect-timeout: ${VNPAY_QUERY_CONNECT_TIMEOUT:3s}
+      query-read-timeout: ${VNPAY_QUERY_READ_TIMEOUT:5s}

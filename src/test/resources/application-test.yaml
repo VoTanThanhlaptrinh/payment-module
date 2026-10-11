@@ -1,0 +1,14 @@
+payment:
+  providers:
+    vnpay:
+      enabled: true
+      payment-url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
+      return-url: https://merchant.test/payments/vnpay/return
+      ipn-url: https://merchant.test/api/v1/payments/webhook/vnpay
+      tmn-code: TEST0001
+      hash-secret: test-only-secret-not-for-production
+      version: "2.1.0"
+      expiry-minutes: 15
+      query-api-url: https://sandbox.vnpayment.vn/merchant_webapi/api/transaction
+      merchant-ip: 127.0.0.1
+      reconciliation-enabled: false
