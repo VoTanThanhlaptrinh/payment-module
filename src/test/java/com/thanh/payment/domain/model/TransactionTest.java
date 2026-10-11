@@ -22,6 +22,9 @@ class TransactionTest {
         assertEquals(TransactionType.CHARGE, tx.getType());
         assertEquals(TransactionStatus.PENDING, tx.getStatus());
         assertEquals(timeout, tx.getExpiredAt());
+        assertEquals(timeout, tx.getNextReconciliationAt());
+        assertEquals(0, tx.getReconciliationAttempts());
+        assertFalse(tx.isReconciliationExhausted());
         assertNull(tx.getProviderTransactionId());
         assertNull(tx.getCompletedAt());
         assertTrue(tx.isPending());
@@ -68,5 +71,24 @@ class TransactionTest {
         tx.markSuccess("TX_123");
 
         assertThrows(IllegalStateException.class, () -> tx.markFailed("Error"));
+    }
+
+    @Test
+    void shouldScheduleAndExhaustReconciliationAttempts() {
+        OffsetDateTime attemptedAt = OffsetDateTime.parse("2026-10-04T10:00:00Z");
+        Transaction tx = Transaction.createCharge(2001L, Money.vnd(150000), attemptedAt.minusMinutes(1));
+
+        tx.recordReconciliationAttempt(attemptedAt, "TRANSPORT_ERROR", attemptedAt.plusMinutes(5), 2);
+
+        assertEquals(1, tx.getReconciliationAttempts());
+        assertEquals(attemptedAt.plusMinutes(5), tx.getNextReconciliationAt());
+        assertFalse(tx.isReconciliationExhausted());
+
+        tx.recordReconciliationAttempt(attemptedAt.plusMinutes(5), "API_91", attemptedAt.plusMinutes(10), 2);
+
+        assertEquals(2, tx.getReconciliationAttempts());
+        assertNull(tx.getNextReconciliationAt());
+        assertTrue(tx.isReconciliationExhausted());
+        assertEquals("API_91", tx.getLastReconciliationCode());
     }
 }

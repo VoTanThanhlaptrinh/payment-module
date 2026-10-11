@@ -1,0 +1,2 @@
+ALTER TABLE transactions
+    ADD COLUMN paid_at TIMESTAMP WITH TIME ZONE;

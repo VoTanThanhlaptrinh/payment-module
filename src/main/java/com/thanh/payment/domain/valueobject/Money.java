@@ -42,6 +42,7 @@ public class Money implements Serializable, Comparable<Money> {
      * @param amount   Số tiền (không được null)
      * @param currency Đơn vị tiền tệ (không được null)
      */
+    // Luôn chuẩn hoá về scale 4 (HALF_UP) để so sánh/lưu DB nhất quán. VNPay chỉ nhận số nguyên VND nên PaymentService còn kiểm tra thêm "không có phần thập phân".
     public Money(BigDecimal amount, Currency currency) {
         if (amount == null) {
             throw new IllegalArgumentException("Amount cannot be null");
