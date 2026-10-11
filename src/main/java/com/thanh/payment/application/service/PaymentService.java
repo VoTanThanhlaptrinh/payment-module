@@ -217,11 +217,14 @@ public class PaymentService
     @Override
     @Transactional
     public PaymentVerificationResult verifyWebhook(PaymentMethodType type, Object payload) {
-        paymentProviderFactory.getEnabledProvider(type);
+        // Provider chưa bật thì không có endpoint này: 404 thay vì lỗi chung.
+        if (!paymentProviderFactory.getProvider(type).isEnabled()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "PROVIDER_DISABLED", "Payment provider is not enabled: " + type);
+        }
         WebhookVerifier verifier = webhookVerifierFactory.getVerifier(type);
         PaymentVerificationResult result = verifier.verify(payload);
         if (!result.isSignatureValid()) {
-            throw new SecurityException("Invalid signature from provider: " + type);
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_SIGNATURE", "Invalid signature from provider: " + type);
         }
         processTransaction(ProcessTransactionCommand.builder()
                 .orderId(result.getOrderId())

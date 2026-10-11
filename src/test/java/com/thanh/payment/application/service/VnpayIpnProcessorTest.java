@@ -17,16 +17,22 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class VnpayIpnProcessorTest {
+
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-11T03:00:00Z"), ZoneOffset.UTC);
 
     @Mock TransactionRepository transactionRepository;
     @Mock PaymentRepository paymentRepository;
@@ -34,7 +40,7 @@ class VnpayIpnProcessorTest {
 
     @BeforeEach
     void setUp() {
-        processor = new VnpayIpnProcessor(transactionRepository, paymentRepository);
+        processor = new VnpayIpnProcessor(transactionRepository, paymentRepository, CLOCK);
     }
 
     @Test
@@ -51,6 +57,40 @@ class VnpayIpnProcessorTest {
         assertEquals("98765", transaction.getProviderTransactionId());
         verify(paymentRepository).save(payment);
         verify(transactionRepository).save(transaction);
+    }
+
+    @Test
+    void shouldRecordPaymentDetailsAndClockTimeOnSuccess() {
+        Payment payment = payment();
+        Transaction transaction = transaction();
+        mockEntities(payment, transaction);
+        Map<String, String> extra = new LinkedHashMap<>();
+        extra.put("vnp_PayDate", "20261011100000");
+        extra.put("vnp_BankCode", "NCB");
+        extra.put("vnp_CardType", "ATM");
+        extra.put("vnp_BankTranNo", "VNP14012345");
+
+        processor.processVerified(data("00", "00", "500000", extra));
+
+        assertEquals(OffsetDateTime.parse("2026-10-11T03:00:00Z").toInstant(), transaction.getPaidAt().toInstant());
+        assertEquals(OffsetDateTime.parse("2026-10-11T03:00:00Z"), transaction.getCompletedAt());
+        assertEquals("NCB", transaction.getProviderBankCode());
+        assertEquals("ATM", transaction.getProviderCardType());
+        assertEquals("VNP14012345", transaction.getProviderBankTranNo());
+    }
+
+    @Test
+    void shouldStillCompleteWhenPayDateIsMalformed() {
+        Payment payment = payment();
+        Transaction transaction = transaction();
+        mockEntities(payment, transaction);
+
+        VnpayIpnResponse response = processor.processVerified(
+                data("00", "00", "500000", Map.of("vnp_PayDate", "not-a-date")));
+
+        assertEquals("00", response.rspCode());
+        assertEquals(TransactionStatus.SUCCESS, transaction.getStatus());
+        assertNull(transaction.getPaidAt());
     }
 
     @Test
@@ -197,7 +237,11 @@ class VnpayIpnProcessorTest {
     }
 
     private VnpayIpnData data(String responseCode, String status, String amount) {
-        Map<String, String> parameters = new LinkedHashMap<>();
+        return data(responseCode, status, amount, Map.of());
+    }
+
+    private VnpayIpnData data(String responseCode, String status, String amount, Map<String, String> extra) {
+        Map<String, String> parameters = new LinkedHashMap<>(extra);
         parameters.put("vnp_TxnRef", "12345");
         parameters.put("vnp_Amount", amount);
         parameters.put("vnp_ResponseCode", responseCode);

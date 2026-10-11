@@ -17,7 +17,11 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.Objects;
 
 /**
@@ -43,6 +47,9 @@ import java.util.Objects;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Transaction {
+
+    private static final ZoneId VNPAY_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final DateTimeFormatter VNPAY_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     // Khoá chính TSID, sinh ở ứng dụng trước khi INSERT. Giá trị này được dùng làm vnp_TxnRef gửi cho VNPay.
     @Id
@@ -100,9 +107,19 @@ public class Transaction {
     @Column(name = "expired_at", nullable = false)
     private OffsetDateTime expiredAt;
 
-    // Thời điểm khách trả tiền. LƯU Ý: hiện chưa có đoạn code nào gán giá trị cho cột này (markSuccess chỉ ghi completedAt).
+    // Thời điểm khách trả tiền theo VNPay (vnp_PayDate), ghi bởi recordPaymentDetails() sau khi thành công. Khác completed_at là lúc hệ thống ghi nhận.
     @Column(name = "paid_at", nullable = true)
     private OffsetDateTime paidAt;
+
+    // Ngân hàng khách dùng (vnp_BankCode), loại thẻ (vnp_CardType) và mã giao dịch phía ngân hàng (vnp_BankTranNo): dữ liệu để đối chiếu sao kê.
+    @Column(name = "provider_bank_code", length = 20)
+    private String providerBankCode;
+
+    @Column(name = "provider_card_type", length = 20)
+    private String providerCardType;
+
+    @Column(name = "provider_bank_tran_no", length = 255)
+    private String providerBankTranNo;
 
     // Thời điểm giao dịch đạt trạng thái kết thúc (SUCCESS/FAILED/EXPIRED/REVIEW_REQUIRED).
     @Column(name = "completed_at", nullable = true)
@@ -212,6 +229,11 @@ public class Transaction {
      * Ghi mã VNPay, thời điểm hoàn tất và xoá lịch đối soát (không cần hỏi lại nữa).
      */
     public void markSuccess(String providerTransactionId, String responseCode) {
+        markSuccess(providerTransactionId, responseCode, OffsetDateTime.now());
+    }
+
+    // Biến thể nhận "now" từ Clock của service để completed_at khớp với đồng hồ ứng dụng và test dùng được thời gian cố định.
+    public void markSuccess(String providerTransactionId, String responseCode, OffsetDateTime now) {
         if (this.status == TransactionStatus.SUCCESS) {
             return;
         }
@@ -222,7 +244,7 @@ public class Transaction {
         this.status = TransactionStatus.SUCCESS;
         this.providerTransactionId = normalizeProviderTransactionId(providerTransactionId);
         this.providerResponseCode = responseCode;
-        this.completedAt = OffsetDateTime.now();
+        this.completedAt = now;
         this.nextReconciliationAt = null;
     }
 
@@ -237,6 +259,10 @@ public class Transaction {
 
     // Giao dịch thất bại. Không được hạ giao dịch đã SUCCESS xuống FAILED. Xoá lịch đối soát.
     public void markFailed(String providerTransactionId, String responseCode, String failureReason) {
+        markFailed(providerTransactionId, responseCode, failureReason, OffsetDateTime.now());
+    }
+
+    public void markFailed(String providerTransactionId, String responseCode, String failureReason, OffsetDateTime now) {
         if (this.status == TransactionStatus.FAILED) {
             return;
         }
@@ -247,7 +273,7 @@ public class Transaction {
         this.providerTransactionId = normalizeProviderTransactionId(providerTransactionId);
         this.providerResponseCode = responseCode;
         this.failureReason = failureReason;
-        this.completedAt = OffsetDateTime.now();
+        this.completedAt = now;
         this.nextReconciliationAt = null;
     }
 
@@ -260,6 +286,10 @@ public class Transaction {
 
     // Giao dịch hết hạn. Không được chuyển giao dịch đã SUCCESS thành EXPIRED. Xoá lịch đối soát.
     public void markExpired(String providerTransactionId, String responseCode, String failureReason) {
+        markExpired(providerTransactionId, responseCode, failureReason, OffsetDateTime.now());
+    }
+
+    public void markExpired(String providerTransactionId, String responseCode, String failureReason, OffsetDateTime now) {
         if (this.status == TransactionStatus.SUCCESS) {
             throw new IllegalStateException("Cannot expire an already successful transaction");
         }
@@ -270,12 +300,16 @@ public class Transaction {
         this.providerTransactionId = normalizeProviderTransactionId(providerTransactionId);
         this.providerResponseCode = responseCode;
         this.failureReason = failureReason;
-        this.completedAt = OffsetDateTime.now();
+        this.completedAt = now;
         this.nextReconciliationAt = null;
     }
 
     // VNPay đánh dấu đáng ngờ: dừng ở REVIEW_REQUIRED chờ người duyệt, không tự quyết. Chỉ từ PENDING.
     public void markReviewRequired(String providerTransactionId, String responseCode, String reason) {
+        markReviewRequired(providerTransactionId, responseCode, reason, OffsetDateTime.now());
+    }
+
+    public void markReviewRequired(String providerTransactionId, String responseCode, String reason, OffsetDateTime now) {
         if (this.status != TransactionStatus.PENDING) {
             throw new IllegalStateException("Cannot review transaction in status: " + this.status);
         }
@@ -283,7 +317,7 @@ public class Transaction {
         this.providerTransactionId = normalizeProviderTransactionId(providerTransactionId);
         this.providerResponseCode = responseCode;
         this.failureReason = reason;
-        this.completedAt = OffsetDateTime.now();
+        this.completedAt = now;
         this.nextReconciliationAt = null;
     }
 
@@ -328,6 +362,52 @@ public class Transaction {
         this.lastReconciliationCode = responseCode;
         this.reconciliationExhausted = this.reconciliationAttempts >= maxAttempts;
         this.nextReconciliationAt = this.reconciliationExhausted ? null : nextAttemptAt;
+    }
+
+    /**
+     * Ghi chi tiết thanh toán VNPay trả về khi thành công. Mọi tham số đều tuỳ chọn (IPN/QueryDR không phải lúc nào cũng có đủ).
+     * vnp_PayDate sai định dạng thì bỏ qua paid_at chứ không làm hỏng việc ghi nhận thanh toán thành công.
+     */
+    public void recordPaymentDetails(String payDate, String bankCode, String cardType, String bankTranNo) {
+        OffsetDateTime parsed = parseVnpayPayDate(payDate);
+        if (parsed != null) {
+            this.paidAt = parsed;
+        }
+        this.providerBankCode = limit(bankCode, 20);
+        this.providerCardType = limit(cardType, 20);
+        this.providerBankTranNo = limit(bankTranNo, 255);
+    }
+
+    /**
+     * Dừng đối soát một giao dịch mà trạng thái cục bộ không còn hợp lệ để hỏi VNPay (vd payment cha không còn PENDING).
+     * Không đổi trạng thái giao dịch; chỉ gỡ khỏi hàng đợi scheduler để không bị chọn lại mãi và cần người kiểm tra tay.
+     */
+    public void blockReconciliation(OffsetDateTime at, String code) {
+        this.lastReconciliationAt = at;
+        this.lastReconciliationCode = code;
+        this.reconciliationExhausted = true;
+        this.nextReconciliationAt = null;
+    }
+
+    // vnp_PayDate có dạng yyyyMMddHHmmss theo giờ Việt Nam (GMT+7).
+    private static OffsetDateTime parseVnpayPayDate(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDateTime.parse(value.trim(), VNPAY_TIME).atZone(VNPAY_ZONE).toOffsetDateTime();
+        } catch (DateTimeParseException exception) {
+            return null;
+        }
+    }
+
+    // Cắt về độ dài cột để dữ liệu lạ từ ngoài không làm INSERT/UPDATE thất bại (và khiến VNPay gửi lại IPN mãi).
+    private static String limit(String value, int maxLength) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.length() <= maxLength ? trimmed : trimmed.substring(0, maxLength);
     }
 
     // VNPay trả "0" hoặc rỗng khi chưa có mã giao dịch: chuẩn hoá về null để không vi phạm unique index trên provider_transaction_id.

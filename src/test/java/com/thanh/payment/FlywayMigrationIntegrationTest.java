@@ -48,6 +48,14 @@ class FlywayMigrationIntegrationTest {
                 """, Integer.class);
         assertEquals(5, reconciliationColumns);
 
+        Integer providerDetailColumns = jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'transactions'
+                  AND column_name IN ('provider_bank_code', 'provider_card_type', 'provider_bank_tran_no')
+                """, Integer.class);
+        assertEquals(3, providerDetailColumns);
+
         Integer reconciliationIndex = jdbcTemplate.queryForObject("""
                 SELECT count(*) FROM pg_indexes
                 WHERE schemaname = 'public'

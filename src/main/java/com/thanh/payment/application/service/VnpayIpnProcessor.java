@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.OffsetDateTime;
 import java.util.Set;
 
 /**
@@ -40,6 +42,7 @@ public class VnpayIpnProcessor {
 
     private final TransactionRepository transactionRepository;
     private final PaymentRepository paymentRepository;
+    private final Clock clock;
 
     // Một transaction DB cho cả quá trình: khoá hàng giữ tới khi COMMIT, nên hai IPN trùng/đua nhau sẽ xếp hàng ở findByIdForUpdate
     // và IPN đến sau luôn thấy kết quả của IPN trước (=> 02).
@@ -104,28 +107,33 @@ public class VnpayIpnProcessor {
         String responseCode = data.get("vnp_ResponseCode");
         String transactionStatus = data.get("vnp_TransactionStatus");
         String providerTransactionId = data.get("vnp_TransactionNo");
+        // Lấy giờ từ Clock của ứng dụng (không phải đồng hồ ngầm trong domain) để completed_at nhất quán và test được.
+        OffsetDateTime now = OffsetDateTime.now(clock);
 
         if ("00".equals(responseCode) && "00".equals(transactionStatus)) {
             // Thành công: cập nhật cả Payment và Transaction (lưu vnp_TransactionNo để đối chiếu với VNPay sau này).
             payment.markCompleted();
-            transaction.markSuccess(providerTransactionId, responseCode);
+            transaction.markSuccess(providerTransactionId, responseCode, now);
+            // Chi tiết để đối chiếu sao kê: giờ trả tiền (vnp_PayDate), ngân hàng, loại thẻ, mã giao dịch ngân hàng. Đều tuỳ chọn.
+            transaction.recordPaymentDetails(data.get("vnp_PayDate"), data.get("vnp_BankCode"),
+                    data.get("vnp_CardType"), data.get("vnp_BankTranNo"));
         } else if ("07".equals(responseCode)
                 && ("00".equals(transactionStatus) || "07".equals(transactionStatus))) {
             // Nghi ngờ gian lận: không giao hàng tự động, cũng không cho tạo payment mới cho order này.
             payment.markReviewRequired();
             transaction.markReviewRequired(providerTransactionId, responseCode,
-                    "VNPay marked the transaction as suspicious");
+                    "VNPay marked the transaction as suspicious", now);
         } else if ("00".equals(responseCode) || "00".equals(transactionStatus)) {
             return VnpayIpnResponse.invalidRequest();
         } else if ("11".equals(responseCode)) {
             // Hết thời gian chờ thanh toán.
             payment.markExpired();
-            transaction.markExpired(providerTransactionId, responseCode, "VNPay payment timeout");
+            transaction.markExpired(providerTransactionId, responseCode, "VNPay payment timeout", now);
         } else if (DECLINED_CODES.contains(responseCode) && !"00".equals(transactionStatus)) {
             // Bị từ chối/khách huỷ: order sau đó được phép tạo lại payment mới.
             payment.markFailed();
             transaction.markFailed(providerTransactionId, responseCode,
-                    "VNPay declined transaction with response code " + responseCode);
+                    "VNPay declined transaction with response code " + responseCode, now);
         } else {
             return VnpayIpnResponse.invalidRequest();
         }

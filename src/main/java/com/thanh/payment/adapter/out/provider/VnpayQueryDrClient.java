@@ -128,7 +128,9 @@ public class VnpayQueryDrClient implements VnpayTransactionQuery {
                 attemptCode("TXN", response.transactionStatus()),
                 response.transactionStatus(),
                 response.transactionNo(),
-                response.message());
+                response.message(),
+                response.payDate(),
+                response.bankCode());
     }
 
     private String expectedAmount(Transaction transaction) {

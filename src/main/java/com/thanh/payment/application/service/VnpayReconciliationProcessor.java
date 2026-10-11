@@ -48,16 +48,22 @@ public class VnpayReconciliationProcessor {
         if (transaction.isReconciliationExhausted()) {
             return VnpayReconciliationOutcome.EXHAUSTED;
         }
+        OffsetDateTime attemptedAt = OffsetDateTime.now(clock);
         Payment payment = paymentRepository.findById(transaction.getPaymentId()).orElse(null);
         if (payment == null
                 || !payment.isPending()
                 || payment.getMethod() != PaymentMethodType.VNPAY
                 || transaction.getType() != TransactionType.CHARGE) {
+            // Trạng thái cục bộ mâu thuẫn (vd payment cha không còn PENDING): không thể tin kết quả QueryDR để áp dụng.
+            // Gỡ khỏi hàng đợi để không bị scheduler chọn lại mãi (chiếm chỗ trong lô), và báo ERROR để người kiểm tra tay.
+            transaction.blockReconciliation(attemptedAt, "INVALID_LOCAL_STATE");
+            transactionRepository.save(transaction);
+            log.error("VNPay reconciliation blocked by inconsistent local state transactionId={} paymentStatus={}",
+                    transactionId, payment == null ? "MISSING" : payment.getStatus());
             return VnpayReconciliationOutcome.INVALID_LOCAL_STATE;
         }
 
         // Ghi nhận lần thử TRƯỚC khi áp dụng kết quả: attempts++, lưu mã kết quả, đặt lịch lần sau (hoặc bật exhausted nếu hết lượt).
-        OffsetDateTime attemptedAt = OffsetDateTime.now(clock);
         transaction.recordReconciliationAttempt(
                 attemptedAt,
                 result.attemptCode(),
@@ -73,19 +79,20 @@ public class VnpayReconciliationProcessor {
         boolean updated = switch (result.decision()) {
             case SUCCESS -> {
                 payment.markCompleted();
-                transaction.markSuccess(result.providerTransactionId(), "00");
+                transaction.markSuccess(result.providerTransactionId(), "00", attemptedAt);
+                transaction.recordPaymentDetails(result.payDate(), result.bankCode(), null, null);
                 yield true;
             }
             case FAILED -> {
                 payment.markFailed();
                 transaction.markFailed(result.providerTransactionId(), result.transactionStatus(),
-                        "VNPay QueryDR reported a failed charge");
+                        "VNPay QueryDR reported a failed charge", attemptedAt);
                 yield true;
             }
             case REVIEW_REQUIRED -> {
                 payment.markReviewRequired();
                 transaction.markReviewRequired(result.providerTransactionId(), result.transactionStatus(),
-                        "VNPay QueryDR requires manual review");
+                        "VNPay QueryDR requires manual review", attemptedAt);
                 yield true;
             }
             case NOT_FOUND -> {
@@ -94,7 +101,7 @@ public class VnpayReconciliationProcessor {
                     yield false;
                 }
                 payment.markExpired();
-                transaction.markExpired(null, "91", "VNPay has no record of this charge after expiry");
+                transaction.markExpired(null, "91", "VNPay has no record of this charge after expiry", attemptedAt);
                 yield true;
             }
             case PENDING, RETRY -> false;

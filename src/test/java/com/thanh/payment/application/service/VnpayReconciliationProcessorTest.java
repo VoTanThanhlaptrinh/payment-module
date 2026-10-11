@@ -25,6 +25,8 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -110,6 +112,38 @@ class VnpayReconciliationProcessorTest {
         assertEquals(PaymentStatus.PENDING, payment.getStatus());
         assertEquals(TransactionStatus.PENDING, transaction.getStatus());
         assertEquals(1, transaction.getReconciliationAttempts());
+        verify(paymentRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldRecordPaymentDetailsFromQueryResult() {
+        Payment payment = payment();
+        Transaction transaction = transaction();
+        mockEntities(payment, transaction);
+
+        processor.apply(12345L, new VnpayQueryResult(VnpayQueryDecision.SUCCESS, "TXN_00", "00", "98765",
+                "Success", "20261004165500", "NCB"));
+
+        assertEquals(OffsetDateTime.parse("2026-10-04T09:55:00Z").toInstant(), transaction.getPaidAt().toInstant());
+        assertEquals("NCB", transaction.getProviderBankCode());
+        assertEquals(OffsetDateTime.parse("2026-10-04T10:00:00Z"), transaction.getCompletedAt());
+    }
+
+    @Test
+    void shouldBlockReconciliationWhenPaymentIsNoLongerPending() {
+        Payment payment = payment();
+        payment.markFailed();
+        Transaction transaction = transaction();
+        mockEntities(payment, transaction);
+
+        VnpayReconciliationOutcome outcome = processor.apply(12345L, VnpayQueryResult.retry("TXN_01", "pending"));
+
+        assertEquals(VnpayReconciliationOutcome.INVALID_LOCAL_STATE, outcome);
+        assertTrue(transaction.isReconciliationExhausted());
+        assertNull(transaction.getNextReconciliationAt());
+        assertEquals("INVALID_LOCAL_STATE", transaction.getLastReconciliationCode());
+        assertEquals(TransactionStatus.PENDING, transaction.getStatus());
+        verify(transactionRepository).save(transaction);
         verify(paymentRepository, never()).save(any());
     }
 

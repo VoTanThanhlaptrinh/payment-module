@@ -46,7 +46,13 @@ public class VnpayReconciliationScheduler {
             log.info("VNPay reconciliation batch candidates={}", candidates.size());
         }
         for (Transaction transaction : candidates) {
-            reconciliationService.reconcile(transaction);
+            // Cô lập từng giao dịch: lỗi ngoài dự kiến ở một giao dịch (DB lỗi, xung đột version) không được chặn các giao dịch sau trong lô.
+            try {
+                reconciliationService.reconcile(transaction);
+            } catch (RuntimeException exception) {
+                log.error("VNPay reconciliation failed transactionId={} errorType={}",
+                        transaction.getId(), exception.getClass().getSimpleName());
+            }
         }
     }
 }

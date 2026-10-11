@@ -2,6 +2,8 @@ package com.thanh.payment.application.service;
 
 import com.thanh.payment.application.command.CreatePaymentCommand;
 import com.thanh.payment.application.dto.PaymentResponse;
+import com.thanh.payment.application.dto.PaymentVerificationResult;
+import com.thanh.payment.application.port.out.WebhookVerifier;
 import com.thanh.payment.application.exception.ApiException;
 import com.thanh.payment.application.port.out.IdempotencyStore;
 import com.thanh.payment.application.port.out.PaymentProvider;
@@ -178,6 +180,36 @@ class PaymentServiceTest {
     }
 
     // Guard giả trả về một ticket thật gắn với store giả, để kiểm tra complete/release được gọi đúng.
+    @Test
+    void verifyWebhookShouldAnswerNotFoundWhenProviderIsDisabled() {
+        when(paymentProviderFactory.getProvider(PaymentMethodType.MOMO)).thenReturn(provider);
+        when(provider.isEnabled()).thenReturn(false);
+
+        ApiException exception = assertThrows(ApiException.class,
+                () -> service.verifyWebhook(PaymentMethodType.MOMO, new Object()));
+
+        assertEquals(HttpStatus.NOT_FOUND, exception.getStatus());
+        assertEquals("PROVIDER_DISABLED", exception.getCode());
+        verifyNoInteractions(webhookVerifierFactory);
+    }
+
+    @Test
+    void verifyWebhookShouldAnswerUnauthorizedWhenSignatureIsInvalid() {
+        WebhookVerifier verifier = org.mockito.Mockito.mock(WebhookVerifier.class);
+        Object payload = new Object();
+        when(paymentProviderFactory.getProvider(PaymentMethodType.MOMO)).thenReturn(provider);
+        when(provider.isEnabled()).thenReturn(true);
+        when(webhookVerifierFactory.getVerifier(PaymentMethodType.MOMO)).thenReturn(verifier);
+        when(verifier.verify(payload)).thenReturn(PaymentVerificationResult.builder().isSignatureValid(false).build());
+
+        ApiException exception = assertThrows(ApiException.class,
+                () -> service.verifyWebhook(PaymentMethodType.MOMO, payload));
+
+        assertEquals(HttpStatus.UNAUTHORIZED, exception.getStatus());
+        assertEquals("INVALID_SIGNATURE", exception.getCode());
+        verifyNoInteractions(paymentRepository, transactionRepository);
+    }
+
     private void givenAcquired() {
         when(paymentProviderFactory.getEnabledProvider(PaymentMethodType.VNPAY)).thenReturn(provider);
         when(idempotencyGuard.acquire(anyString(), anyString()))

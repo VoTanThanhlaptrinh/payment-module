@@ -6,6 +6,7 @@ import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -43,6 +44,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MissingRequestHeaderException.class)
     ResponseEntity<ApiErrorResponse> handleMissingHeader(MissingRequestHeaderException exception) {
         return ResponseEntity.badRequest().body(error("MISSING_HEADER", exception.getMessage(), Map.of()));
+    }
+
+    // Body JSON hỏng hoặc sai kiểu là lỗi của bên gọi (400), không phải lỗi hệ thống (500).
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ResponseEntity<ApiErrorResponse> handleUnreadableBody(HttpMessageNotReadableException exception) {
+        return ResponseEntity.badRequest().body(error("INVALID_BODY", "Request body is missing or malformed", Map.of()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

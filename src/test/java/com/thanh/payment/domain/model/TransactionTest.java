@@ -91,4 +91,54 @@ class TransactionTest {
         assertTrue(tx.isReconciliationExhausted());
         assertEquals("API_91", tx.getLastReconciliationCode());
     }
+
+    @Test
+    @DisplayName("recordPaymentDetails đọc vnp_PayDate theo giờ Việt Nam và cắt dữ liệu quá dài")
+    void shouldRecordProviderPaymentDetails() {
+        Transaction tx = Transaction.createCharge(2001L, Money.vnd(150000), OffsetDateTime.now().plusMinutes(15));
+
+        tx.recordPaymentDetails("20261011100000", " NCB ", "A".repeat(30), "B".repeat(300));
+
+        assertEquals(OffsetDateTime.parse("2026-10-11T03:00:00Z").toInstant(), tx.getPaidAt().toInstant());
+        assertEquals("NCB", tx.getProviderBankCode());
+        assertEquals(20, tx.getProviderCardType().length());
+        assertEquals(255, tx.getProviderBankTranNo().length());
+    }
+
+    @Test
+    @DisplayName("vnp_PayDate sai định dạng hoặc rỗng thì bỏ qua paid_at, không ném lỗi")
+    void shouldIgnoreMalformedPayDate() {
+        Transaction tx = Transaction.createCharge(2001L, Money.vnd(150000), OffsetDateTime.now().plusMinutes(15));
+
+        tx.recordPaymentDetails("2026-10-11", null, "", null);
+        assertNull(tx.getPaidAt());
+        assertNull(tx.getProviderCardType());
+        tx.recordPaymentDetails(null, "NCB", null, null);
+        assertNull(tx.getPaidAt());
+    }
+
+    @Test
+    @DisplayName("mark* dùng thời điểm truyền vào cho completed_at")
+    void shouldUseSuppliedTimeForCompletion() {
+        OffsetDateTime now = OffsetDateTime.parse("2026-10-11T03:00:00Z");
+        Transaction tx = Transaction.createCharge(2001L, Money.vnd(150000), now.plusMinutes(15));
+
+        tx.markSuccess("123", "00", now);
+
+        assertEquals(now, tx.getCompletedAt());
+    }
+
+    @Test
+    @DisplayName("blockReconciliation gỡ giao dịch khỏi hàng đợi đối soát nhưng giữ PENDING")
+    void shouldBlockReconciliationWithoutChangingStatus() {
+        OffsetDateTime now = OffsetDateTime.parse("2026-10-11T03:00:00Z");
+        Transaction tx = Transaction.createCharge(2001L, Money.vnd(150000), now);
+
+        tx.blockReconciliation(now, "INVALID_LOCAL_STATE");
+
+        assertTrue(tx.isReconciliationExhausted());
+        assertNull(tx.getNextReconciliationAt());
+        assertEquals("INVALID_LOCAL_STATE", tx.getLastReconciliationCode());
+        assertEquals(TransactionStatus.PENDING, tx.getStatus());
+    }
 }
