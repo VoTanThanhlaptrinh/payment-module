@@ -12,7 +12,9 @@ import java.time.OffsetDateTime;
 @Getter
 @Builder
 public class PaymentResponse {
+    @Deprecated
     private final Long id;
+    private final Long paymentId;
     private final Long orderId;
     private final BigDecimal totalAmount;
     private final Currency currency;

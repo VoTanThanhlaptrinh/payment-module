@@ -5,195 +5,236 @@ import com.thanh.payment.application.command.ProcessTransactionCommand;
 import com.thanh.payment.application.command.RefundCommand;
 import com.thanh.payment.application.dto.PaymentResponse;
 import com.thanh.payment.application.dto.PaymentVerificationResult;
-import com.thanh.payment.application.mapper.PaymentMapper;
+import com.thanh.payment.application.exception.ApiException;
 import com.thanh.payment.application.port.in.CreatePaymentUseCase;
 import com.thanh.payment.application.port.in.ProcessTransactionUseCase;
 import com.thanh.payment.application.port.in.RefundUseCase;
 import com.thanh.payment.application.port.in.VerifyWebhookUseCase;
 import com.thanh.payment.application.port.out.PaymentProvider;
-import com.thanh.payment.application.port.out.ProviderCheckoutRequest;
-import com.thanh.payment.application.port.out.ProviderCheckoutResult;
+import com.thanh.payment.application.port.out.WebhookVerifier;
 import com.thanh.payment.domain.model.Payment;
+import com.thanh.payment.domain.exception.ActivePaymentExistsException;
+import com.thanh.payment.domain.exception.DuplicateIdempotencyKeyException;
 import com.thanh.payment.domain.model.PaymentMethodType;
 import com.thanh.payment.domain.model.PaymentStatus;
 import com.thanh.payment.domain.model.Transaction;
 import com.thanh.payment.domain.repository.PaymentRepository;
 import com.thanh.payment.domain.repository.TransactionRepository;
-import com.thanh.payment.domain.valueobject.Money;
+import com.thanh.payment.domain.valueobject.Currency;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.util.HexFormat;
 import java.util.Optional;
 
+/**
+ * Dịch vụ trung tâm của luồng thanh toán.
+ *
+ *   - createPayment: tạo Payment + Transaction và dựng URL VNPay (an toàn khi bị gọi lặp nhờ idempotency + khoá).
+ *   - processTransaction / verifyWebhook: đường xử lý callback CŨ dành cho MoMo/bank (VNPay đã có VnpayIpnService riêng).
+ *   - refund: chưa triển khai.
+ */
 @Service
 @RequiredArgsConstructor
-public class PaymentService implements CreatePaymentUseCase, ProcessTransactionUseCase, RefundUseCase, VerifyWebhookUseCase {
+public class PaymentService
+        implements CreatePaymentUseCase, ProcessTransactionUseCase, RefundUseCase, VerifyWebhookUseCase {
 
     private final PaymentRepository paymentRepository;
     private final TransactionRepository transactionRepository;
+    private final IdempotencyGuard idempotencyGuard;
+    private final PaymentCreator paymentCreator;
     private final PaymentProviderFactory paymentProviderFactory;
+    private final WebhookVerifierFactory webhookVerifierFactory;
+    private final Clock clock;
 
+    /**
+     * Tạo thanh toán VNPay. KHÔNG có @Transactional: Redis nằm ngoài transaction DB, phần ghi DB nằm ở PaymentCreator.
+     *
+     * Các bước:
+     *   1. Validate đầu vào, kiểm tra provider đã bật, tính keyHash và requestHash.
+     *   2. IdempotencyGuard xin giữ key trong Redis (nguyên tử): trùng thì báo "đang xử lý" / conflict,
+     *      đã xong thì trả lại kết quả cũ, Redis sập thì 503.
+     *   3. PaymentCreator ghi DB trong một transaction (INSERT Payment, Transaction, idempotency_keys; ký URL VNPay).
+     *      Chống trùng ở DB nhờ unique: vi phạm thì replay hoặc báo order đang có payment active.
+     *   4. Thành công thì đánh dấu key COMPLETED (24h); thoát bằng exception thì try-with-resources nhả key.
+     */
     @Override
-    @Transactional
     public PaymentResponse createPayment(CreatePaymentCommand command) {
-        Optional<Payment> paymentOptional = paymentRepository.findByOrderIdAndStatus(command.getOrderId(), PaymentStatus.PENDING);
-        if (paymentOptional.isPresent()) {
-            return handleExistingPendingPayment(paymentOptional.get());
+        // Bước 1: kiểm tra đầu vào (độc lập với Bean Validation ở controller) rồi chọn provider đang bật.
+        validateCreateCommand(command);
+        PaymentProvider provider = getEnabledProvider(command.getMethod());
+        // Chỉ băm key rồi dùng hash để tra/lưu: không lưu Idempotency-Key gốc. requestHash đại diện "ý định" của request để phát hiện cùng key mà khác nội dung.
+        String keyHash = sha256(command.getIdempotencyKey());
+        String requestHash = requestHash(command);
+        // Thời gian lấy từ Clock được tiêm vào (không gọi giờ hệ thống trực tiếp) để test với giờ cố định.
+        OffsetDateTime now = OffsetDateTime.now(clock);
+
+        // Bước 2: xin key. Ném ApiException nếu trùng/conflict/Redis sập.
+        IdempotencyGuard.Acquisition acquisition = idempotencyGuard.acquire(keyHash, requestHash);
+        if (acquisition instanceof IdempotencyGuard.AlreadyCompleted done) {
+            return paymentCreator.replay(done.paymentId());
         }
-
-        Money amount = Money.of(command.getAmount(), command.getCurrency());
-        Payment newPayment = Payment.create(
-                command.getOrderId(),
-                amount,
-                command.getMethod()
-        );
-        Payment savedPayment = paymentRepository.save(newPayment);
-
-        return createChargeAndProcess(savedPayment, command.getMethod());
+        // Bước 3-4: try-with-resources đảm bảo key luôn được nhả nếu chưa complete.
+        try (IdempotencyTicket ticket = ((IdempotencyGuard.Acquired) acquisition).ticket()) {
+            PaymentResponse response = createOrRecover(command, provider, keyHash, requestHash, now);
+            ticket.complete(response.getPaymentId());
+            return response;
+        }
     }
 
-    private PaymentResponse handleExistingPendingPayment(Payment payment) {
-        Optional<Transaction> pendingTxOpt = transactionRepository.findPendingChargeByPaymentId(payment.getId());
-        if (pendingTxOpt.isEmpty()) {
-            return createChargeAndProcess(payment, payment.getMethod());
+    // Ghi DB; chống trùng dựa vào unique của DB (đã được repository dịch thành exception domain):
+    //   - key đã có trong DB (vd Redis mất dữ liệu) => trả lại kết quả cũ, 409 nếu khác nội dung, hoặc tạo lại nếu key đã hết hạn
+    //   - order đã có payment đang hoạt động       => 409 PAYMENT_ALREADY_PENDING
+    private PaymentResponse createOrRecover(CreatePaymentCommand command, PaymentProvider provider,
+                                            String keyHash, String requestHash, OffsetDateTime now) {
+        try {
+            return paymentCreator.create(command, provider, keyHash, requestHash, now);
+        } catch (DuplicateIdempotencyKeyException duplicate) {
+            try {
+                return paymentCreator.replayOrRestart(command, provider, keyHash, requestHash, now);
+            } catch (ActivePaymentExistsException active) {
+                throw orderAlreadyPending();
+            }
+        } catch (ActivePaymentExistsException active) {
+            throw orderAlreadyPending();
         }
-
-        Transaction pendingTx = pendingTxOpt.get();
-        if (pendingTx.isExpired()) {
-            pendingTx.markExpired();
-            transactionRepository.save(pendingTx);
-            throw new IllegalStateException("Payment transaction has expired");
-        }
-
-        return PaymentMapper.toResponseDTO(payment);
     }
 
-    private PaymentResponse createChargeAndProcess(Payment payment, PaymentMethodType method) {
-        // VN-07: Tạo và lưu charge transaction trước khi dựng checkout URL để có merchant reference duy nhất
-        Transaction chargeTx = Transaction.createCharge(
-                payment.getId(),
-                payment.getTotalAmount(),
-                OffsetDateTime.now().plusMinutes(15)
-        );
-        transactionRepository.save(chargeTx);
-
-        PaymentProvider provider = paymentProviderFactory.getProvider(method);
-        
-        ProviderCheckoutRequest req = ProviderCheckoutRequest.builder()
-                .paymentId(payment.getId())
-                .transactionId(chargeTx.getId())
-                .orderId(payment.getOrderId())
-                .amount(payment.getTotalAmount())
-                .createdAt(payment.getCreatedAt())
-                .expiresAt(chargeTx.getExpiredAt())
-                .build();
-
-        ProviderCheckoutResult result = provider.processPayment(req);
-
-        return PaymentMapper.toResponseDTO(payment, result);
+    private ApiException orderAlreadyPending() {
+        return new ApiException(HttpStatus.CONFLICT, "PAYMENT_ALREADY_PENDING",
+                "The order already has an active payment");
     }
 
+    // Hiện chỉ VNPAY được hỗ trợ; phương thức khác bị từ chối trước khi chạm DB. Provider chưa bật cấu hình => 400 PAYMENT_METHOD_NOT_ENABLED.
+    private PaymentProvider getEnabledProvider(PaymentMethodType method) {
+        try {
+            return paymentProviderFactory.getEnabledProvider(method);
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PAYMENT_METHOD_NOT_ENABLED", exception.getMessage());
+        }
+    }
+
+    // Kiểm tra đầu vào theo ràng buộc của VNPay. Chạy trước mọi truy vấn DB để request sai bị loại sớm, không giữ khoá.
+    private void validateCreateCommand(CreatePaymentCommand command) {
+        if (command.getCurrency() != Currency.VND) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_PAYMENT_REQUEST", "VNPay only supports VND");
+        }
+        BigDecimal amount = command.getAmount();
+        // VND không có phần lẻ; VNPay yêu cầu tối thiểu 5.000đ.
+        if (amount == null || amount.stripTrailingZeros().scale() > 0
+                || amount.compareTo(BigDecimal.valueOf(5_000)) < 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_AMOUNT",
+                    "VNPay amount must be a whole VND amount of at least 5000");
+        }
+        // VNPay quy định vnp_Amount = số tiền x 100 và tối đa 12 chữ số.
+        BigInteger providerAmount = amount.toBigIntegerExact().multiply(BigInteger.valueOf(100));
+        if (providerAmount.toString().length() > 12) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_AMOUNT", "VNPay amount exceeds protocol limits");
+        }
+        if (command.getIdempotencyKey() == null
+                // Key phải là 8-128 ký tự ASCII hiển thị được (không khoảng trắng).
+                || !command.getIdempotencyKey().matches("[\\x21-\\x7E]{8,128}")) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_IDEMPOTENCY_KEY",
+                    "Idempotency-Key must contain 8 to 128 visible ASCII characters");
+        }
+        if (command.getClientIp() == null || command.getClientIp().isBlank()
+                || command.getClientIp().length() > 45) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_CLIENT_IP", "Client IP is required");
+        }
+    }
+
+    // Băm "ý định" của request: orderId|amount|currency|method (amount đã bỏ số 0 thừa nên 150000 và 150000.00 cho cùng hash). Dùng để phân biệt replay hợp lệ với dùng sai key.
+    private String requestHash(CreatePaymentCommand command) {
+        String canonical = command.getOrderId() + "|"
+                + command.getAmount().stripTrailingZeros().toPlainString() + "|"
+                + command.getCurrency() + "|" + command.getMethod();
+        return sha256(canonical);
+    }
+
+    // SHA-256 dạng hex (64 ký tự), khớp độ dài cột key_hash/request_hash.
+    private String sha256(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
+    }
+
+    // Đường xử lý callback CŨ cho MoMo/bank: đánh dấu Payment/Transaction theo kết quả đã verify.
+    // KHÔNG kiểm tra số tiền và không khoá hàng, nên không dùng cho VNPay (đã có VnpayIpnProcessor).
     @Override
     @Transactional
     public void processTransaction(ProcessTransactionCommand command) {
-        // 1. Tìm Transaction tương ứng với dữ liệu callback từ cổng thanh toán
         Transaction transaction = findTransaction(command);
-
-        // 2. Tìm Payment tương ứng từ paymentId của Transaction (đảm bảo tính nhất quán dữ liệu)
         Payment payment = paymentRepository.findById(transaction.getPaymentId())
-                .orElseThrow(() -> new IllegalStateException(
-                        String.format("Không tìm thấy Payment tương ứng với Transaction ID: %s (paymentId: %s)",
-                                transaction.getId(), transaction.getPaymentId())
-                ));
-
-        // 3. Cập nhật trạng thái thành công hoặc thất bại cho cả 2 entity
+                .orElseThrow(
+                        () -> new IllegalStateException("Payment not found for transaction " + transaction.getId()));
         if (command.isSuccess()) {
-            applyTransactionSuccess(payment, transaction, command);
+            payment.markCompleted();
+            transaction.markSuccess(command.getProviderTransactionId() != null
+                    ? command.getProviderTransactionId()
+                    : command.getTransactionId());
         } else {
-            applyTransactionFailure(payment, transaction, command);
+            payment.markFailed();
+            transaction.markFailed(command.getProviderTransactionId(), null, command.getFailureReason());
         }
-
-        // 4. Lưu đồng thời Payment và Transaction trong cùng transaction database (VN-08)
         paymentRepository.save(payment);
         transactionRepository.save(transaction);
     }
 
-    /**
-     * Tra cứu Transaction từ thông tin command callback.
-     * Ưu tiên tìm theo TSID (vnp_TxnRef), sau đó tìm theo providerTransactionId,
-     * và cuối cùng fallback qua orderId.
-     */
     private Transaction findTransaction(ProcessTransactionCommand command) {
-        // Ưu tiên tra cứu theo TSID transactionId (VN-04/VN-07)
         if (command.getTransactionId() != null) {
             try {
-                Long txId = Long.valueOf(command.getTransactionId());
-                return transactionRepository.findById(txId)
-                        .orElseThrow(() -> new IllegalStateException("Không tìm thấy Transaction với ID: " + txId));
+                return transactionRepository.findById(Long.valueOf(command.getTransactionId()))
+                        .orElseThrow(() -> new IllegalStateException(
+                                "Transaction not found: " + command.getTransactionId()));
             } catch (NumberFormatException ignored) {
-                // transactionId là chuỗi ký tự của đối tác khác (không phải Long TSID)
-            }
-
-            // Thử tra cứu theo mã đối tác cung cấp (provider_transaction_id)
-            Optional<Transaction> txByProviderOpt = transactionRepository.findByProviderTransactionId(command.getTransactionId());
-            if (txByProviderOpt.isPresent()) {
-                return txByProviderOpt.get();
+                Optional<Transaction> byProvider = transactionRepository
+                        .findByProviderTransactionId(command.getTransactionId());
+                if (byProvider.isPresent()) {
+                    return byProvider.get();
+                }
             }
         }
-
-        // Fallback: Tìm qua orderId
         Payment payment = paymentRepository.findByOrderIdAndStatus(command.getOrderId(), PaymentStatus.PENDING)
-                .orElseThrow(() -> new IllegalStateException("Không tìm thấy Payment PENDING với orderId: " + command.getOrderId()));
-
+                .orElseThrow(() -> new IllegalStateException("Pending payment not found"));
         return transactionRepository.findPendingChargeByPaymentId(payment.getId())
-                .orElseThrow(() -> new IllegalStateException("Không tìm thấy Transaction PENDING cho payment ID: " + payment.getId()));
+                .orElseThrow(() -> new IllegalStateException("Pending charge not found"));
     }
 
-    /**
-     * Cập nhật trạng thái giao dịch thành công.
-     */
-    private void applyTransactionSuccess(Payment payment, Transaction transaction, ProcessTransactionCommand command) {
-        String providerTxId = command.getProviderTransactionId() != null
-                ? command.getProviderTransactionId()
-                : command.getTransactionId();
-
-        payment.markCompleted();
-        transaction.markSuccess(providerTxId);
-    }
-
-    /**
-     * Cập nhật trạng thái giao dịch thất bại kèm lý do.
-     */
-    private void applyTransactionFailure(Payment payment, Transaction transaction, ProcessTransactionCommand command) {
-        payment.markFailed();
-        transaction.markFailed(command.getFailureReason());
-    }
-
+    // Đường cũ: verify chữ ký bằng WebhookVerifier của provider rồi gọi processTransaction.
+    // Hiện không với tới được vì MoMo/bank chưa bật; cần thay bằng processor riêng như VnpayIpnProcessor trước khi bật.
     @Override
     @Transactional
     public PaymentVerificationResult verifyWebhook(PaymentMethodType type, Object payload) {
-        PaymentProvider provider = paymentProviderFactory.getProvider(type);
-        PaymentVerificationResult result = provider.verify(payload);
-
+        paymentProviderFactory.getEnabledProvider(type);
+        WebhookVerifier verifier = webhookVerifierFactory.getVerifier(type);
+        PaymentVerificationResult result = verifier.verify(payload);
         if (!result.isSignatureValid()) {
             throw new SecurityException("Invalid signature from provider: " + type);
         }
-
-        ProcessTransactionCommand ptCommand = ProcessTransactionCommand.builder()
+        processTransaction(ProcessTransactionCommand.builder()
                 .orderId(result.getOrderId())
                 .transactionId(result.getTransactionId())
                 .providerTransactionId(result.getProviderTransactionId())
                 .failureReason(result.getFailureReason())
                 .success(result.isSuccess())
-                .build();
-        this.processTransaction(ptCommand);
-
+                .build());
         return result;
     }
 
     @Override
     public void refund(RefundCommand command) {
+        // Refund is intentionally outside the VNPay P0 slice.
     }
 }

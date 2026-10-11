@@ -26,4 +26,13 @@ public class PaymentProviderFactory {
         }
         return provider;
     }
+
+    // Chỉ trả về provider đã bật cấu hình (enabled=true); chưa bật thì ném IllegalArgumentException, PaymentService đổi thành 400 PAYMENT_METHOD_NOT_ENABLED.
+    public PaymentProvider getEnabledProvider(PaymentMethodType type) {
+        PaymentProvider provider = getProvider(type);
+        if (!provider.isEnabled()) {
+            throw new IllegalArgumentException("Payment method is not enabled: " + type);
+        }
+        return provider;
+    }
 }

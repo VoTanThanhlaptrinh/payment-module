@@ -14,4 +14,8 @@ public class CreatePaymentCommand {
     private final BigDecimal amount;
     private final Currency currency;
     private final PaymentMethodType method;
+    // Giá trị header Idempotency-Key do client gửi (8-128 ký tự ASCII).
+    private final String idempotencyKey;
+    // IP người gọi lấy từ request, chuyển tiếp làm vnp_IpAddr.
+    private final String clientIp;
 }
