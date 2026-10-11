@@ -1,0 +1,157 @@
+openapi: 3.1.0
+info:
+  title: Payment Module API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /
+security: []
+paths:
+  /api/v1/payments:
+    post:
+      operationId: createPayment
+      summary: Create a VNPay hosted checkout
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentRequest'
+      responses:
+        '201':
+          description: Payment and checkout created, or an idempotent replay
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          description: Invalid request or disabled payment method
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Idempotency conflict, in-progress request, or active payment
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/payments/webhook/vnpay:
+    get:
+      operationId: processVnpayIpn
+      summary: Receive a signed VNPay IPN
+      description: Always returns HTTP 200; RspCode determines whether VNPay retries the notification.
+      parameters:
+        - name: vnp_TmnCode
+          in: query
+          required: true
+          schema: { type: string }
+        - name: vnp_Amount
+          in: query
+          required: true
+          schema: { type: string, pattern: '^[0-9]{1,12}$' }
+        - name: vnp_TxnRef
+          in: query
+          required: true
+          schema: { type: string }
+        - name: vnp_TransactionNo
+          in: query
+          required: true
+          schema: { type: string }
+        - name: vnp_ResponseCode
+          in: query
+          required: true
+          schema: { type: string }
+        - name: vnp_TransactionStatus
+          in: query
+          required: true
+          schema: { type: string }
+        - name: vnp_SecureHash
+          in: query
+          required: true
+          schema: { type: string, minLength: 128, maxLength: 128 }
+      responses:
+        '200':
+          description: VNPay acknowledgement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VnpayIpnResponse'
+  /api/v1/payments/webhook/vnpay/return:
+    get:
+      operationId: receiveVnpayBrowserReturn
+      summary: Receive the customer browser redirect from VNPay
+      description: Display-only endpoint. It never updates payment or transaction state; server-to-server IPN and verified QueryDR are authoritative.
+      parameters:
+        - name: vnp_TxnRef
+          in: query
+          required: false
+          schema: { type: string }
+        - name: vnp_ResponseCode
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Return received; authoritative confirmation may still be pending
+          content:
+            text/plain:
+              schema: { type: string }
+components:
+  schemas:
+    CreatePaymentRequest:
+      type: object
+      required: [orderId, amount, currency, paymentMethod]
+      properties:
+        orderId: { type: integer, format: int64, minimum: 1 }
+        amount: { type: integer, minimum: 5000, maximum: 9999999999 }
+        currency: { type: string, enum: [VND] }
+        paymentMethod: { type: string, enum: [VNPAY] }
+    PaymentResponse:
+      type: object
+      required: [paymentId, orderId, totalAmount, currency, method, status, transactionId, checkoutUrl, expiresAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+          deprecated: true
+        paymentId: { type: integer, format: int64 }
+        orderId: { type: integer, format: int64 }
+        totalAmount: { type: number }
+        currency: { type: string }
+        method: { type: string }
+        status: { type: string }
+        transactionId: { type: string }
+        checkoutUrl: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }
+    VnpayIpnResponse:
+      type: object
+      required: [RspCode, Message]
+      properties:
+        RspCode: { type: string, enum: ['00', '01', '02', '04', '97', '99'] }
+        Message: { type: string }
+    ApiError:
+      type: object
+      required: [code, message, traceId, timestamp, fieldErrors]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        traceId: { type: string }
+        timestamp: { type: string, format: date-time }
+        fieldErrors:
+          type: object
+          additionalProperties: { type: string }
