@@ -1,6 +1,6 @@
 # Production Readiness Roadmap — Payment Module
 
-> **Ngày đánh giá:** 04/10/2026
+> **Ngày đánh giá:** 10/10/2026 (đánh giá trước: 04/10/2026)
 >
 > **Mục tiêu:** Đưa payment module từ nền tảng hiện tại đến trạng thái có thể vận hành production.
 >
@@ -20,11 +20,11 @@
 
 | Mục tiêu | Đã đạt | Tổng | Tiến độ |
 | --- | ---: | ---: | ---: |
-| ARCH — Kiến trúc và cấu hình | 2 | 7 | 28,6% |
-| DAT — Domain và dữ liệu | 5 | 10 | 50,0% |
-| API — Payment API | 2 | 9 | 22,2% |
-| PRV — Provider integration | 1 | 13 | 7,7% |
-| WEB — Webhook/IPN | 3 | 11 | 27,3% |
+| ARCH — Kiến trúc và cấu hình | 4 | 7 | 57,1% |
+| DAT — Domain và dữ liệu | 3 | 10 | 30,0% |
+| API — Payment API | 3 | 9 | 33,3% |
+| PRV — Provider integration | 2 | 13 | 15,4% |
+| WEB — Webhook/IPN | 4 | 11 | 36,4% |
 | REF — Refund và reconciliation | 0 | 10 | 0,0% |
 | EVT — Event và tính nhất quán | 0 | 7 | 0,0% |
 | SEC — Bảo mật và tuân thủ | 2 | 10 | 20,0% |
@@ -32,33 +32,105 @@
 | OBS — Observability và SLO | 0 | 9 | 0,0% |
 | TST — Testing và quality gate | 4 | 14 | 28,6% |
 | OPS — Build, deployment và vận hành | 1 | 12 | 8,3% |
-| **Toàn dự án** | **20** | **121** | **16,5%** |
+| **Toàn dự án** | **23** | **121** | **19,0%** |
 
 ### Release gates
 
 | Gate | Điều kiện | Hiện tại | Trạng thái |
 | --- | --- | ---: | --- |
-| **P0 — Functional & Secure** | Hoàn tất ARCH, DAT, API, PRV, WEB, SEC và TST-01 đến TST-10 | 19/70 | Chưa đạt |
+| **P0 — Functional & Secure** | Hoàn tất ARCH, DAT, API, PRV, WEB, SEC và TST-01 đến TST-10 | 22/70 | Chưa đạt |
 | **P1 — Operationally Complete** | P0 đạt; hoàn tất REF, EVT, REL, OBS, TST-11 đến TST-14 và OPS-01 đến OPS-09 | 1/48 | Chưa đạt |
 | **P2 — Production Approved** | P1 đạt; hoàn tất OPS-10 đến OPS-12, không còn lỗ hổng Critical/High chưa xử lý | 0/3 | Chưa đạt |
 
 Production chỉ được phê duyệt khi đạt cả ba gate và toàn bộ 121 tiêu chí.
 
-## ARCH — Kiến trúc và cấu hình (2/7)
+## Kết quả đánh giá 10/10/2026
+
+Bản sao working tree (không gồm `.env`) đã được chạy `mvn clean verify` trên JDK 21 với Docker/Testcontainers hoạt động. Đây là lần đầu bốn test PostgreSQL thực sự chạy.
+
+| Bộ test | Kết quả |
+| --- | --- |
+| 63 unit/MVC test | Pass |
+| `PaymentApplicationTests`, `VnpayIpnPersistenceIntegrationTest` | Pass, nhưng trên schema do Hibernate tự tạo, không phải Flyway |
+| `FlywayMigrationIntegrationTest` (2 test) | **Fail**: không có `flyway_schema_history`; partial unique index active-payment không tồn tại |
+
+### Phát hiện chặn P0
+
+1. **Flyway không chạy.** Spring Boot 4 tách auto-configuration của Flyway sang module riêng; `pom.xml` chỉ khai báo `flyway-core` nên migration V1/V2 bị bỏ qua hoàn toàn. Schema thực tế do `ddl-auto: update` sinh ra, vì vậy không có partial unique index (`uq_payments_order_id_active`, `uq_transactions_pending_charge`), FK hay index reconciliation. Bằng chứng: log test không có dòng Flyway nào; assertion `expected 4 but was 3`.
+2. **Migration lệch entity.** `Transaction.paidAt` map tới cột `paid_at` nhưng V1/V2 không tạo cột này. Khi bật Flyway và `ddl-auto: validate`, context fail với `Schema validation: missing column [paid_at]`.
+3. **Production vẫn chạy `ddl-auto: update`.** `application.yaml` đặt `update`; `application-staging.yaml`/`application-production.yaml` không ghi đè. Ghi chú ARCH-05 trước đây nói đã dùng `validate` là sai.
+4. **Profile mặc định là `local`.** `spring.profiles.active: local` nằm trong `application.yaml`; quên đặt `SPRING_PROFILES_ACTIVE` khi deploy sẽ chạy với `postgres/postgres` và `guest/guest`.
+5. **`.env` được import tự động.** `application.yaml` có `spring.config.import: optional:file:.env[.properties]`, mâu thuẫn với runbook (nói Spring không đọc `.env`). Cần chọn một cách và sửa tài liệu còn lại.
+6. **Toàn bộ VNPay slice chưa được commit.** Commit cuối là 04/10/2026; khoảng 50 file (IPN, QueryDR, idempotency, migration, CI workflow, runbook) vẫn là thay đổi chưa commit, nên CI chưa từng chạy trên code này.
+
+Thử nghiệm trên bản sao cho thấy ba thay đổi sau làm toàn bộ **67/67 test pass**: thay `flyway-core` bằng `spring-boot-starter-flyway`, thêm `V3__transactions_paid_at.sql` (`ALTER TABLE transactions ADD COLUMN paid_at TIMESTAMP WITH TIME ZONE;`) và đổi `ddl-auto` thành `validate`.
+
+### Điều chỉnh checkbox
+
+- **DAT-05** bỏ tick: schema migration không khớp entity (`paid_at`).
+- **DAT-06** bỏ tick: constraint chỉ tồn tại trong file SQL, không tồn tại trong database khi chạy.
+- Không tick thêm tiêu chí nào vì chưa có CI run trên code đã commit.
+
+## Lộ trình đến cổng thanh toán
+
+Thứ tự dưới đây là đường ngắn nhất từ hiện trạng đến một cổng thanh toán VNPay chạy thật, rồi mở rộng sang MoMo/bank. Mỗi mốc liệt kê tiêu chí roadmap mà nó đóng; mốc sau chỉ bắt đầu khi exit gate của mốc trước đạt.
+
+### M0 — Nền móng chạy đúng (đang chặn mọi thứ)
+
+- Commit VNPay slice hiện tại thành các commit Conventional Commits có scope, đẩy lên để CI `verify` chạy.
+- Sửa Flyway (starter + V3 `paid_at`), đặt `ddl-auto: validate` cho mọi profile, bỏ `spring.profiles.active` mặc định, thống nhất cách nạp `.env` giữa config và runbook.
+- Sửa link SEC-02 trỏ tới `schema-payments.sql` đã xóa.
+- **Exit gate:** `./mvnw clean verify` xanh trong GitHub Actions; tick lại DAT-05/06 và xét DAT-07/08/09, ARCH-05, TST-07, TST-14.
+- **Tiến độ 10/10/2026:** đã sửa trong working tree: `spring-boot-starter-flyway`, `V3__transactions_paid_at.sql`, `ddl-auto: validate`, `flyway.clean-disabled`, bỏ profile mặc định (`spring-boot:run` dùng `local` qua cấu hình plugin), chỉ profile `local` import `.env`, runbook cập nhật theo. `mvn clean verify` trên bản sao: 67/67 test pass, Flyway áp dụng V1→V3. Còn lại: commit, CI xanh, sửa link SEC-02 (đã sửa trong tài liệu này).
+
+### M1 — VNPay sandbox end-to-end
+
+- Cloudflare Tunnel + credential sandbox theo `VNPAY_SANDBOX_RUNBOOK.md`; checkout thật → IPN `RspCode=00` → DB `COMPLETED/SUCCESS`; thử bỏ IPN để QueryDR phục hồi.
+- Bổ sung test mismatch matrix và MVC contract cho từng `RspCode`.
+- **Đóng:** PRV-04, PRV-06, WEB-09/10/11 (phần VNPay), REF-09 (VNPay), API-02.
+
+### M2 — API cho merchant và bảo mật nội bộ
+
+- `GET /api/v1/payments/{paymentId}`, `GET /api/v1/payments?orderId=`; authentication/authorization cho API nội bộ (webhook giữ xác thực bằng chữ ký).
+- Bảng `webhook_events` để dedupe/audit callback; redact log.
+- **Đóng:** API-04, API-05, API-07, API-09, SEC-03, SEC-06, WEB-07, WEB-08.
+
+### M3 — Refund
+
+- `RefundCommand` đầy đủ, refund full/partial có idempotency, `Transaction(type=REFUND)`, VNPay refund API, job hết hạn payment.
+- **Đóng:** REF-01 → REF-08, API-06.
+
+### M4 — Sự kiện và tính nhất quán
+
+- Transactional outbox → RabbitMQ, event catalog, consumer idempotent, DLQ. Quyết định giữ hay gỡ Redis (hiện chưa dùng).
+- **Đóng:** EVT-01 → EVT-07.
+
+### M5 — MoMo, rồi chuyển khoản ngân hàng
+
+- Trước khi làm: tách lời gọi provider ra khỏi DB transaction trong `PaymentService.createPayment`. VNPay chỉ dựng URL cục bộ nên chấp nhận được, nhưng MoMo gọi HTTP ra ngoài và sẽ giữ advisory lock + connection suốt thời gian chờ.
+- Thay đường xử lý webhook chung `verifyWebhook`/`processTransaction` (không đối chiếu amount, ném `SecurityException` thành 500) bằng processor riêng theo mẫu `VnpayIpnProcessor`.
+- **Đóng:** PRV-02, PRV-03, PRV-07 → PRV-13, WEB-05, WEB-06, TST-08.
+
+### M6 — Vận hành production
+
+- Observability, reliability, Docker image, staging, backup/restore, runbook sự cố.
+- **Đóng:** OBS-*, REL-*, OPS-02 → OPS-12, các tiêu chí SEC và TST còn lại.
+
+## ARCH — Kiến trúc và cấu hình (4/7)
 
 **Kết quả mong muốn:** Boundary rõ ràng, cấu hình theo môi trường và chỉ cho phép capability thực sự được hỗ trợ.
 
 - [x] **ARCH-01** — Mã nguồn được chia thành `domain`, `application`, `adapter`, `infrastructure`, `presentation`. Bằng chứng: [`src/main/java/com/thanh/payment`](../src/main/java/com/thanh/payment).
 - [x] **ARCH-02** — Use-case port và provider port tách orchestration khỏi controller/adapter. Bằng chứng: [`application/port`](../src/main/java/com/thanh/payment/application/port).
-- [ ] **ARCH-03** — Chỉ còn một repository port chính thức; interface rỗng/trùng vai trò được loại bỏ. Bằng chứng đạt: không còn `application.port.out.PaymentRepository` rỗng.
+- [x] **ARCH-03** — Chỉ còn repository port trong domain; interface `application.port.out.PaymentRepository` rỗng đã được loại bỏ. Bằng chứng: [`domain/repository`](../src/main/java/com/thanh/payment/domain/repository).
 - [ ] **ARCH-04** — Dependency rule được ghi thành ADR và kiểm tra tự động bằng ArchUnit; domain không phụ thuộc presentation/provider. Bằng chứng đạt: ADR và architecture test chạy trong CI.
 - [ ] **ARCH-05** — Có profile `local`, `test`, `staging`, `production`; production không dùng `ddl-auto: update` hoặc `show-sql`. Bằng chứng đạt: cấu hình profile và test binding.
 - [ ] **ARCH-06** — Mọi credential, provider secret và broker password đến từ secret store/environment, không có giá trị thật trong Git. Bằng chứng đạt: config placeholder và secret scan pass.
-- [ ] **ARCH-07** — API từ chối `COD`/`CREDIT_CARD` và mọi method chưa có provider trước khi tạo bản ghi. Bằng chứng đạt: validation + test không phát sinh payment rác.
+- [x] **ARCH-07** — API từ chối `COD`/`CREDIT_CARD` và mọi method chưa enable trước persistence. Bằng chứng: [`PaymentService.java`](../src/main/java/com/thanh/payment/application/service/PaymentService.java), [`PaymentServiceTest.java`](../src/test/java/com/thanh/payment/application/service/PaymentServiceTest.java).
 
-**Tiến độ hiện tại:** Có skeleton hexagonal, nhưng repository port bị trùng, config dùng chung một file và PostgreSQL password đang hard-code.
+**Tiến độ hiện tại:** Repository port trùng đã được loại bỏ và capability chưa enable bị chặn trước persistence. Đã có profile `local`, `test`, `staging`, `production`, config production không còn secret fallback. **Cập nhật 10/10:** Hibernate vẫn dùng `ddl-auto: update` ở mọi profile và `local` là profile mặc định (xem M0); ARCH-05/06 vẫn chờ sửa cấu hình, profile binding test và secret-scan CI pass.
 
-## DAT — Domain và dữ liệu (5/10)
+## DAT — Domain và dữ liệu (3/10)
 
 **Kết quả mong muốn:** Mô hình tiền tệ và lifecycle giao dịch nhất quán, có persistence/migration an toàn và chống cập nhật đồng thời sai.
 
@@ -66,22 +138,22 @@ Production chỉ được phê duyệt khi đạt cả ba gate và toàn bộ 12
 - [x] **DAT-02** — `Money` chuẩn hóa precision/scale, currency và kiểm tra phép toán khác tiền tệ. Bằng chứng: [`Money.java`](../src/main/java/com/thanh/payment/domain/valueobject/Money.java).
 - [x] **DAT-03** — `Transaction` mô hình hóa charge/refund, success/failed/expired và provider transaction ID. Bằng chứng: [`Transaction.java`](../src/main/java/com/thanh/payment/domain/model/Transaction.java).
 - [ ] **DAT-04** — Domain chặn order ID không hợp lệ, số tiền không dương, currency/method không hỗ trợ và refund vượt số đã thu. Bằng chứng đạt: invariant tests ở domain/service.
-- [x] **DAT-05** — `Payment` có JPA repository, persistence adapter và schema tương ứng. Bằng chứng: [`PaymentRepositoryImpl.java`](../src/main/java/com/thanh/payment/infrastructure/persistence/PaymentRepositoryImpl.java), [`schema-payments.sql`](../src/main/resources/db/schema-payments.sql).
-- [x] **DAT-06** — Database giới hạn một payment `PENDING` trên mỗi order. Bằng chứng: partial unique index trong [`schema-payments.sql`](../src/main/resources/db/schema-payments.sql).
+- [ ] **DAT-05** — `Payment` có JPA repository, persistence adapter và schema tương ứng. Bằng chứng: [`PaymentRepositoryImpl.java`](../src/main/java/com/thanh/payment/infrastructure/persistence/PaymentRepositoryImpl.java), [`V1__payment_schema.sql`](../src/main/resources/db/migration/V1__payment_schema.sql).
+- [ ] **DAT-06** — Database giới hạn một payment active trên mỗi order. Bằng chứng: partial unique index trong [`V1__payment_schema.sql`](../src/main/resources/db/migration/V1__payment_schema.sql).
 - [ ] **DAT-07** — `Transaction` có schema, repository, index theo payment/provider reference và foreign key hợp lệ. Bằng chứng đạt: migration + integration test.
 - [ ] **DAT-08** — Toàn bộ schema được quản lý bằng Flyway/Liquibase với migration tiến/lùi có quy trình rõ ràng. Bằng chứng đạt: versioned migrations và migration test từ database rỗng.
 - [ ] **DAT-09** — Payment/transaction dùng optimistic lock hoặc atomic conditional update để chống lost update. Bằng chứng đạt: version column/update condition và concurrency test.
 - [ ] **DAT-10** — Có persistence với unique constraint cho idempotency key, webhook event/provider transaction và outbox event. Bằng chứng đạt: migrations + duplicate tests.
 
-**Tiến độ hiện tại:** `Transaction` mới tồn tại ở domain; chưa có table/repository. Schema đang được quản lý song song bằng file SQL và Hibernate auto-update.
+**Tiến độ hiện tại:** Đã có Flyway migration, table/repository `Transaction`, FK/index, idempotency table và version columns. **Cập nhật 10/10:** integration test đã chạy trên PostgreSQL và chứng minh Flyway không được thực thi (thiếu auto-config Boot 4) và migration thiếu cột `paid_at`; DAT-05/06 bị bỏ tick cho đến khi `FlywayMigrationIntegrationTest` pass trong CI.
 
-## API — Payment API (2/9)
+## API — Payment API (3/9)
 
 **Kết quả mong muốn:** API ổn định, idempotent, có thể tạo và truy vấn payment/refund bằng contract được tài liệu hóa.
 
 - [x] **API-01** — Có endpoint tạo payment và Bean Validation cho các trường bắt buộc/số tiền dương. Bằng chứng: [`PaymentController.java`](../src/main/java/com/thanh/payment/presentation/controller/PaymentController.java), [`CreatePaymentRequest.java`](../src/main/java/com/thanh/payment/presentation/dto/CreatePaymentRequest.java).
 - [ ] **API-02** — `POST /api/v1/payments` bắt buộc `Idempotency-Key`; retry cùng payload trả cùng kết quả, payload khác trả conflict. Bằng chứng đạt: API/service/concurrency tests.
-- [ ] **API-03** — Create response trả `paymentId`, trạng thái, `checkoutUrl` hoặc `qrPayload`, `expiresAt` và không trả secret. Bằng chứng đạt: DTO, OpenAPI và controller test.
+- [x] **API-03** — Create response trả `paymentId`, trạng thái, signed `checkoutUrl`, `expiresAt` và không trả secret; giữ `id` deprecated để tương thích. Bằng chứng: [`PaymentResponse.java`](../src/main/java/com/thanh/payment/application/dto/PaymentResponse.java), [`payment-api.yaml`](../src/main/resources/static/openapi/payment-api.yaml), [`PaymentControllerTest.java`](../src/test/java/com/thanh/payment/presentation/controller/PaymentControllerTest.java).
 - [ ] **API-04** — Có `GET /api/v1/payments/{paymentId}` với authorization và trạng thái hiện tại. Bằng chứng đạt: contract + service/controller tests.
 - [ ] **API-05** — Có truy vấn payment/transaction theo `orderId` với pagination khi trả danh sách. Bằng chứng đạt: OpenAPI + repository/controller tests.
 - [ ] **API-06** — Có `POST /api/v1/payments/{paymentId}/refunds` hỗ trợ full/partial refund và idempotency. Bằng chứng đạt: contract + E2E sandbox test.
@@ -89,7 +161,9 @@ Production chỉ được phê duyệt khi đạt cả ba gate và toàn bộ 12
 - [x] **API-08** — Public route có version `/api/v1`. Bằng chứng: [`PaymentController.java`](../src/main/java/com/thanh/payment/presentation/controller/PaymentController.java), [`WebhookController.java`](../src/main/java/com/thanh/payment/presentation/controller/WebhookController.java).
 - [ ] **API-09** — OpenAPI mô tả request/response, status code, enum, idempotency và ví dụ cho mọi endpoint. Bằng chứng đạt: spec được validate trong CI.
 
-## PRV — Provider integration (1/13)
+**Tiến độ hiện tại (11/10/2026):** Create API bắt buộc `Idempotency-Key`; Redis giữ key nguyên tử (Lua) làm lớp chặn nhanh, PostgreSQL unique (`uq_idempotency_scope_key`, `uq_payments_order_id_active`) làm lớp bảo vệ cuối, kể cả khi Redis mất dữ liệu; Redis sập trả 503. Đã có unit test và `IdempotencyEndToEndIntegrationTest` (Testcontainers) nhưng chưa chạy trên CI/PostgreSQL thật nên API-02 chưa được tick. Chưa có xác thực nên Idempotency-Key vẫn là không gian chung (SEC-03).
+
+## PRV — Provider integration (2/13)
 
 **Kết quả mong muốn:** Cả ba provider tạo giao dịch thật qua hosted checkout/QR, có mapping ổn định và được kiểm thử với sandbox.
 
@@ -97,7 +171,7 @@ Production chỉ được phê duyệt khi đạt cả ba gate và toàn bộ 12
 - [ ] **PRV-02** — Contract provider dùng typed request/result cho create, query, refund; không dùng `Object` payload ở application boundary. Bằng chứng đạt: interface + compile-time tests.
 - [ ] **PRV-03** — HTTP client chung cấu hình connect/read timeout, correlation ID, TLS validation và retry chỉ cho thao tác an toàn. Bằng chứng đạt: config + failure tests.
 - [ ] **PRV-04** — VNPay tạo hosted checkout thật, lưu provider reference và expiry. Bằng chứng đạt: sandbox create-payment test.
-- [ ] **PRV-05** — VNPay mapping đầy đủ success/pending/declined/timeout và mã lỗi chuẩn nội bộ. Bằng chứng đạt: mapping unit tests.
+- [x] **PRV-05** — VNPay mapping success, review-required, declined, timeout và unknown; unknown không mặc định success. Bằng chứng: [`VnpayIpnProcessor.java`](../src/main/java/com/thanh/payment/application/service/VnpayIpnProcessor.java), [`VnpayIpnProcessorTest.java`](../src/test/java/com/thanh/payment/application/service/VnpayIpnProcessorTest.java).
 - [ ] **PRV-06** — VNPay có contract test chạy với sandbox hoặc deterministic stub theo payload thật. Bằng chứng đạt: test report trong CI.
 - [ ] **PRV-07** — MoMo tạo hosted checkout/QR thật, lưu provider reference và expiry. Bằng chứng đạt: sandbox create-payment test.
 - [ ] **PRV-08** — MoMo mapping đầy đủ success/pending/declined/timeout và mã lỗi chuẩn nội bộ. Bằng chứng đạt: mapping unit tests.
@@ -107,16 +181,16 @@ Production chỉ được phê duyệt khi đạt cả ba gate và toàn bộ 12
 - [ ] **PRV-12** — Bank adapter có contract test chạy với sandbox hoặc deterministic stub theo payload thật. Bằng chứng đạt: test report trong CI.
 - [ ] **PRV-13** — Mỗi provider có config validation, sandbox/production switch và runbook rotate/revoke credential. Bằng chứng đạt: startup validation + runbook diễn tập.
 
-**Tiến độ hiện tại:** Ba adapter và factory đã có, nhưng mọi `processPayment()` vẫn rỗng và chưa sinh checkout URL/QR.
+**Tiến độ hiện tại:** VNPay đã sinh deterministic signed checkout URL PAY 2.1.0 và có golden fixture; MoMo/bank vẫn disabled. PRV-04 chờ sandbox E2E, PRV-06 chờ CI publish test report.
 
-## WEB — Webhook/IPN (3/11)
+## WEB — Webhook/IPN (4/11)
 
 **Kết quả mong muốn:** Callback được xác thực theo đúng đặc tả, xử lý đúng một lần về mặt nghiệp vụ và phản hồi đúng contract provider.
 
 - [x] **WEB-01** — Có route nhận VNPay IPN và bind payload. Bằng chứng: [`WebhookController.java`](../src/main/java/com/thanh/payment/presentation/controller/WebhookController.java).
 - [x] **WEB-02** — Có route nhận MoMo IPN và bind payload. Bằng chứng: [`WebhookController.java`](../src/main/java/com/thanh/payment/presentation/controller/WebhookController.java).
 - [x] **WEB-03** — Có route nhận bank webhook và bind payload. Bằng chứng: [`WebhookController.java`](../src/main/java/com/thanh/payment/presentation/controller/WebhookController.java).
-- [ ] **WEB-04** — VNPay secure hash được canonicalize và xác minh HMAC-SHA512 constant-time bằng secret quản lý bên ngoài. Bằng chứng đạt: official vectors + tamper tests.
+- [x] **WEB-04** — VNPay secure hash được canonicalize và xác minh HMAC-SHA512 constant-time bằng secret từ environment. Bằng chứng: [`VnpaySignatureService.java`](../src/main/java/com/thanh/payment/adapter/out/provider/VnpaySignatureService.java), [`VnpayIpnVerifierTest.java`](../src/test/java/com/thanh/payment/adapter/out/provider/VnpayIpnVerifierTest.java).
 - [ ] **WEB-05** — MoMo signature được canonicalize và xác minh HMAC-SHA256 constant-time. Bằng chứng đạt: official vectors + tamper tests.
 - [ ] **WEB-06** — Bank signature được xác minh đúng thuật toán/field order của đối tác. Bằng chứng đạt: official vectors + tamper tests.
 - [ ] **WEB-07** — Callback quá hạn hoặc replay bị chặn bằng timestamp/nonce theo khả năng của provider. Bằng chứng đạt: replay tests và audit event.
@@ -125,7 +199,7 @@ Production chỉ được phê duyệt khi đạt cả ba gate và toàn bộ 12
 - [ ] **WEB-10** — Verify, deduplicate, cập nhật payment/transaction và ghi outbox diễn ra atomic dưới concurrent callbacks. Bằng chứng đạt: transaction boundary + concurrency test.
 - [ ] **WEB-11** — Success/error acknowledgement đúng contract từng provider; lỗi tạm thời và lỗi vĩnh viễn có response khác nhau. Bằng chứng đạt: controller contract tests.
 
-**Tiến độ hiện tại:** Kiểm tra signature chỉ xác nhận chuỗi không rỗng/khác hằng giả lập; `transactionId` nhận được nhưng chưa được lưu.
+**Tiến độ hiện tại:** VNPay IPN xác minh signature trước DB, đối chiếu TmnCode/reference/amount/currency/provider, khóa transaction và trả acknowledgement `00/01/02/04/97/99`. Concurrent duplicate integration test đã pass trên PostgreSQL ngày 10/10 (bản sao local, schema do Hibernate tạo); WEB-08/09/10/11 chưa được tick vì cần chạy lại trên schema Flyway trong CI và còn thiếu MoMo/bank.
 
 ## REF — Refund và reconciliation (0/10)
 
@@ -141,6 +215,8 @@ Production chỉ được phê duyệt khi đạt cả ba gate và toàn bộ 12
 - [ ] **REF-08** — Job đánh dấu payment/transaction hết hạn an toàn và phát sự kiện tương ứng. Bằng chứng đạt: clock-controlled integration test.
 - [ ] **REF-09** — Reconciliation định kỳ so sánh local/provider, phát hiện missing/amount/status mismatch. Bằng chứng đạt: scheduled job + fixture report.
 - [ ] **REF-10** — Có queue/quy trình xử lý sai lệch, quyền phê duyệt và audit cho thao tác sửa thủ công. Bằng chứng đạt: runbook + audit test.
+
+**Tiến độ hiện tại:** VNPay đã có QueryDR signed request/response và scheduler cho charge `PENDING` quá hạn, retry 5 phút tối đa 12 lần. REF-09 chưa được tick vì migration/scheduler integration test và sandbox recovery evidence chưa chạy.
 
 ## EVT — Event và tính nhất quán (0/7)
 
@@ -159,7 +235,7 @@ Production chỉ được phê duyệt khi đạt cả ba gate và toàn bộ 12
 **Kết quả mong muốn:** Giảm phạm vi PCI bằng hosted checkout, bảo vệ secret/dữ liệu và lưu audit không thể chối bỏ.
 
 - [x] **SEC-01** — Public payment/webhook DTO hiện không nhận PAN, CVV hoặc dữ liệu thẻ thô. Bằng chứng: [`presentation/dto`](../src/main/java/com/thanh/payment/presentation/dto), [`dto/webhook`](../src/main/java/com/thanh/payment/application/dto/webhook).
-- [x] **SEC-02** — Entity/schema hiện không có cột PAN/CVV. Bằng chứng: [`domain/model`](../src/main/java/com/thanh/payment/domain/model), [`schema-payments.sql`](../src/main/resources/db/schema-payments.sql).
+- [x] **SEC-02** — Entity/schema hiện không có cột PAN/CVV. Bằng chứng: [`domain/model`](../src/main/java/com/thanh/payment/domain/model), [`V1__payment_schema.sql`](../src/main/resources/db/migration/V1__payment_schema.sql).
 - [ ] **SEC-03** — Internal API có authentication và authorization theo service/user scope; webhook chỉ dựa vào verified provider identity/signature. Bằng chứng đạt: security config + authorization tests.
 - [ ] **SEC-04** — TLS bắt buộc cho inbound/outbound; certificate/hostname validation không bị tắt. Bằng chứng đạt: deployment config + TLS tests.
 - [ ] **SEC-05** — Secret được lưu trong secret manager, phân quyền tối thiểu, rotate/revoke có diễn tập. Bằng chứng đạt: policy + rotation record.
@@ -216,7 +292,7 @@ Production chỉ được phê duyệt khi đạt cả ba gate và toàn bộ 12
 - [ ] **TST-13** — Coverage gate đạt ≥80% line, ≥70% branch toàn module và ≥90% cho domain/service cốt lõi. Bằng chứng đạt: JaCoCo report + CI gate.
 - [ ] **TST-14** — `./mvnw clean verify` chạy thành công trong CI với JDK pin version và Docker/Testcontainers. Bằng chứng đạt: protected-branch CI run.
 
-**Lưu ý baseline:** 22 test method đang tồn tại, nhưng chưa thể xác minh chạy pass trong môi trường đánh giá vì không có Java (`java: command not found`). Vì vậy chỉ tiêu chí “test tồn tại” được tick; TST-14 chưa đạt.
+**Lưu ý baseline (10/10/2026):** 67 test. 63 unit/MVC test pass; khi chạy với Docker, 2 test context/IPN concurrency pass và 2 test `FlywayMigrationIntegrationTest` fail do Flyway không chạy (xem phần đánh giá 10/10). TST-14 chỉ được tick sau khi `clean verify` pass trong CI.
 
 ## OPS — Build, deployment và vận hành (1/12)
 

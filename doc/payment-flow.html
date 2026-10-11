@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Luồng thanh toán VNPay – payment-module (tương tác)</title>
+<style>
+:root{
+  --bg:#f6f7f9;--card:#ffffff;--ink:#1c2230;--muted:#5d6779;--line:#dfe3ea;--accent:#2563eb;--accent-ink:#fff;
+  --ok:#15803d;--okbg:#e6f6ec;--bad:#b91c1c;--badbg:#fdeaea;--warn:#a16207;--warnbg:#fdf3dc;--info:#1d4ed8;--infobg:#e8effe;
+  --code:#0f172a;--codebg:#eef1f6;--shadow:0 1px 3px rgba(16,24,40,.08);
+}
+[data-theme=dark]{
+  --bg:#0f141c;--card:#171e29;--ink:#e6eaf2;--muted:#9aa5b8;--line:#2a3445;--accent:#5b93ff;--accent-ink:#0b1220;
+  --ok:#4ade80;--okbg:#12301f;--bad:#f87171;--badbg:#3a1618;--warn:#fbbf24;--warnbg:#38290c;--info:#8bb3ff;--infobg:#172544;
+  --code:#dbe4f5;--codebg:#1e2736;--shadow:none;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:70px}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:50;background:var(--card);border-bottom:1px solid var(--line);box-shadow:var(--shadow)}
+.bar{display:flex;align-items:center;gap:10px;padding:8px 16px;flex-wrap:wrap}
+.bar b{font-size:15px;margin-right:6px}
+nav{display:flex;gap:2px;flex-wrap:wrap;flex:1}
+nav a{color:var(--muted);text-decoration:none;padding:4px 9px;border-radius:6px;font-size:13px}
+nav a:hover,nav a.on{background:var(--infobg);color:var(--info)}
+#progress{height:3px;background:var(--accent);width:0}
+main{max-width:1120px;margin:0 auto;padding:20px 16px 80px}
+section{margin:0 0 34px}
+h1{font-size:26px;margin:8px 0}
+h2{font-size:21px;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+h2 .n{background:var(--accent);color:var(--accent-ink);border-radius:50%;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;flex:none}
+h3{font-size:16px;margin:14px 0 6px}
+.lead{color:var(--muted);margin:0 0 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button,select,input{font:inherit;color:inherit}
+button{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer;transition:.12s}
+button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.pri:hover:not(:disabled){filter:brightness(1.1);color:var(--accent-ink)}
+button.chip{border-radius:999px;font-size:13px;padding:4px 11px}
+button.chip.on{background:var(--infobg);border-color:var(--accent);color:var(--info);font-weight:600}
+button.sm{padding:2px 8px;font-size:12px}
+input,select{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 9px;min-width:0}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+label{font-size:13px;color:var(--muted);display:block;margin-bottom:2px}
+code,.mono{font-family:ui-monospace,Consolas,"Cascadia Mono",monospace;font-size:12.5px}
+code{background:var(--codebg);color:var(--code);padding:1px 5px;border-radius:4px}
+pre.code{background:var(--codebg);color:var(--code);padding:10px 12px;border-radius:8px;overflow:auto;margin:6px 0;white-space:pre-wrap;word-break:break-all;position:relative}
+.tag{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid transparent}
+.t-ok{background:var(--okbg);color:var(--ok)}.t-bad{background:var(--badbg);color:var(--bad)}
+.t-warn{background:var(--warnbg);color:var(--warn)}.t-info{background:var(--infobg);color:var(--info)}.t-none{background:var(--codebg);color:var(--muted)}
+.note{border-left:4px solid var(--accent);background:var(--infobg);padding:8px 12px;border-radius:0 8px 8px 0;margin:8px 0;font-size:14px}
+.note.warn{border-color:var(--warn);background:var(--warnbg)}
+.note.bad{border-color:var(--bad);background:var(--badbg)}
+.note.ok{border-color:var(--ok);background:var(--okbg)}
+/* architecture */
+.layers{display:grid;gap:8px}
+.layer{text-align:left;padding:10px 14px;border-radius:10px;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.layer.on{border-color:var(--accent);background:var(--infobg)}
+.layer small{color:var(--muted)}
+/* sequence */
+#seqwrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+svg text{font-family:system-ui,sans-serif}
+#seq{display:block;width:100%;min-width:760px;height:auto}
+#seq .lbl{paint-order:stroke;stroke:var(--card);stroke-width:5px;stroke-linejoin:round}
+.arrow{cursor:pointer;transition:opacity .2s}
+.arrow:hover .lbl{text-decoration:underline}
+.stepbox{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:760px){.stepbox{grid-template-columns:1fr}}
+.dbstate{display:flex;gap:10px;flex-wrap:wrap}
+.dbstate div{background:var(--codebg);border-radius:8px;padding:6px 10px;font-size:13px}
+.prog{height:6px;background:var(--codebg);border-radius:999px;overflow:hidden;margin:8px 0}
+.prog i{display:block;height:100%;background:var(--accent);transition:width .25s}
+/* labs */
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.trace{list-style:none;margin:8px 0;padding:0}
+.trace li{display:flex;gap:8px;padding:5px 8px;border-radius:6px;font-size:13.5px;align-items:flex-start}
+.trace li.pass{background:var(--okbg)}.trace li.fail{background:var(--badbg)}.trace li.skip{opacity:.45}.trace li.stop{background:var(--warnbg)}
+.trace .ic{flex:none;width:18px;font-weight:700}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:12.5px}
+/* state machine */
+.states{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.st{padding:5px 12px;border-radius:8px;border:2px solid var(--line);background:var(--card);font-size:13px;font-weight:600;transition:.15s}
+.st.cur{border-color:var(--accent);background:var(--infobg);color:var(--info);transform:scale(1.07)}
+/* accordion */
+details{border:1px solid var(--line);border-radius:10px;background:var(--card);margin:7px 0}
+summary{cursor:pointer;padding:10px 14px;font-weight:600;list-style:none;display:flex;gap:8px}
+summary::before{content:"▸";color:var(--accent);transition:.15s}
+details[open] summary::before{transform:rotate(90deg)}
+details .body{padding:0 16px 12px}
+details.hide{display:none}
+mark{background:#fde68a;color:#000;border-radius:3px}
+/* quiz */
+.q{margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:10px}
+.opt{display:block;width:100%;text-align:left;margin:5px 0}
+.opt.right{background:var(--okbg);border-color:var(--ok);color:var(--ok)}
+.opt.wrong{background:var(--badbg);border-color:var(--bad);color:var(--bad)}
+#toTop{position:fixed;right:18px;bottom:18px;border-radius:50%;width:42px;height:42px;padding:0;display:none;box-shadow:var(--shadow)}
+.copy{position:absolute;right:6px;top:6px}
+.legend span{margin-right:12px;font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <b>💳 payment-module · VNPay</b>
+    <nav id="nav">
+      <a href="#s-arch">Kiến trúc</a><a href="#s-seq">Sơ đồ luồng</a><a href="#s-lab1">Lab 1 Tạo</a>
+      <a href="#s-lab2">Lab 2 Chữ ký</a><a href="#s-lab3">Lab 3 IPN</a><a href="#s-lab4">Lab 4 Đối soát</a>
+      <a href="#s-state">Trạng thái</a><a href="#s-know">Kiến thức</a><a href="#s-codes">Bảng mã</a><a href="#s-quiz">Quiz</a>
+    </nav>
+    <button id="themeBtn" class="sm" title="Đổi sáng/tối">🌙 Tối</button>
+  </div>
+  <div id="progress"></div>
+</header>
+
+<main>
+<h1>Luồng thanh toán VNPay – giải thích tương tác</h1>
+<p class="lead">Dựa trên code thật của module (<code>PaymentService</code>, <code>VnpayAdapter</code>, <code>VnpaySignatureService</code>, <code>VnpayIpnService</code>, <code>VnpayIpnProcessor</code>, <code>VnpayReconciliationProcessor</code>). Mọi thứ chạy trong trình duyệt – <b>mô phỏng giáo dục</b>, secret là giá trị demo, không gọi backend, không có thông tin thật.</p>
+<div class="note">Cách học gợi ý: xem <b>Sơ đồ luồng</b> với kịch bản ✅ trước → chơi <b>Lab 1–4</b> để tự phá luồng → đọc <b>Kiến thức</b> → làm <b>Quiz</b>.</div>
+
+<!-- 1 -->
+<section id="s-arch">
+  <h2><span class="n">1</span>Kiến trúc hexagonal</h2>
+  <p class="lead">Bấm vào từng tầng để xem trách nhiệm và các class tiêu biểu. Quy tắc: tầng trong (domain) không biết gì về Spring hay VNPay.</p>
+  <div class="grid g2">
+    <div class="layers" id="layers"></div>
+    <div class="card" id="layerInfo"></div>
+  </div>
+</section>
+
+<!-- 2 -->
+<section id="s-seq">
+  <h2><span class="n">2</span>Sơ đồ tuần tự theo kịch bản</h2>
+  <p class="lead">Chọn kịch bản, bấm <b>Sau ▶</b> (hoặc phím ← →) để đi từng bước, hoặc bấm trực tiếp vào mũi tên. Mũi tên mờ = chưa xảy ra.</p>
+  <div class="row" id="scenBtns" style="margin-bottom:10px"></div>
+  <div class="card" id="scenDesc" style="margin-bottom:10px"></div>
+  <div class="row" style="margin-bottom:8px">
+    <button id="bReset">⏮ Reset</button><button id="bPrev">◀ Trước</button>
+    <button id="bNext" class="pri">Sau ▶</button><button id="bAuto">▶ Tự chạy</button>
+    <label style="margin:0 0 0 8px">Tốc độ
+      <select id="speed"><option value="2200">Chậm</option><option value="1400" selected>Vừa</option><option value="700">Nhanh</option></select></label>
+    <span id="stepCount" class="tag t-info"></span>
+  </div>
+  <div class="prog"><i id="stepProg"></i></div>
+  <div id="seqwrap"><svg id="seq" xmlns="http://www.w3.org/2000/svg"></svg></div>
+  <div class="stepbox" style="margin-top:12px">
+    <div class="card" id="stepInfo"></div>
+    <div class="card"><b>Trạng thái trong DB tại bước này</b>
+      <div class="dbstate" id="dbState" style="margin-top:8px"></div>
+      <div id="stepCode" style="margin-top:10px"></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 -->
+<section id="s-lab1">
+  <h2><span class="n">3</span>Lab 1 – Tạo thanh toán &amp; idempotency</h2>
+  <p class="lead">Mô phỏng <code>PaymentService.createPayment</code>: validate → khóa → replay/conflict → kiểm order đang active → ghi DB. “Server” giả lập nhớ các request bạn đã gửi.</p>
+  <div class="card">
+    <div class="form">
+      <div><label>orderId</label><input id="l1order" type="number" value="1001"></div>
+      <div><label>amount (VND)</label><input id="l1amount" value="150000"></div>
+      <div><label>currency</label><select id="l1cur"><option>VND</option><option>USD</option></select></div>
+      <div><label>method</label><select id="l1method"><option>VNPAY</option><option>MOMO</option><option>BANK_TRANSFER</option><option>COD</option></select></div>
+      <div><label>Idempotency-Key</label><input id="l1key" value="key-order-1001-a"></div>
+      <div><label>Client IP</label><input id="l1ip" value="203.0.113.7"></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="l1send" class="pri">Gửi POST /api/v1/payments</button>
+      <button class="chip" data-p="replay">♻️ Cùng key + cùng body</button>
+      <button class="chip" data-p="conflict">⚔️ Cùng key, đổi amount</button>
+      <button class="chip" data-p="newkey">🆕 Key mới, cùng order</button>
+      <button class="chip" data-p="lowamt">💸 amount = 4999</button>
+      <button class="chip" data-p="decimal">🔢 amount = 10000.5</button>
+      <button class="chip" data-p="badkey">🔑 key quá ngắn</button>
+      <button class="chip" data-p="momo">🅼 method = MOMO</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="l1finish">✅ Giả lập: payment của order này → COMPLETED</button>
+      <button id="l1review">⚠️ Giả lập: → REVIEW_REQUIRED</button>
+      <button id="l1clear">🗑 Xoá server giả lập</button>
+    </div>
+    <h3>Kết quả</h3>
+    <div id="l1out" class="note">Chưa gửi request nào.</div>
+    <h3>Bảng trong DB giả lập</h3>
+    <table><thead><tr><th>payment.id</th><th>order</th><th>amount</th><th>payment.status</th><th>transaction (CHARGE)</th></tr></thead><tbody id="l1pay"></tbody></table>
+    <table style="margin-top:10px"><thead><tr><th>idempotency_key (hash rút gọn)</th><th>request_hash</th><th>state</th><th>payment</th></tr></thead><tbody id="l1idem"></tbody></table>
+  </div>
+</section>
+
+<!-- 4 -->
+<section id="s-lab2">
+  <h2><span class="n">4</span>Lab 2 – Tạo chữ ký HMAC-SHA512</h2>
+  <p class="lead">Đúng thuật toán <code>VnpaySignatureService</code>: bỏ giá trị rỗng → sắp xếp theo khoá → URL-encode kiểu Java (<code>URLEncoder</code>, dấu cách = <code>+</code>) → nối <code>k=v&amp;…</code> → HMAC-SHA512 (hex). Sửa bất kỳ ô nào để thấy chữ ký lệch.</p>
+  <div class="card">
+    <div class="row" style="margin-bottom:8px"><label style="margin:0">Hash secret (DEMO)</label>
+      <input id="l2secret" value="DEMO_SECRET_NOT_REAL_0123456789" style="width:290px" class="mono"></div>
+    <div class="form" id="l2fields"></div>
+    <div class="row" style="margin-top:10px">
+      <button id="l2sign" class="pri">🔏 Ký (tạo checkout URL)</button>
+      <button id="l2tamper">😈 Giả mạo: sửa vnp_Amount</button>
+      <button id="l2reset">↺ Khôi phục</button>
+      <span id="l2status"></span>
+    </div>
+    <h3>Chuỗi canonical (đã sắp xếp + encode)</h3>
+    <pre class="code" id="l2canon"><button class="copy sm" data-copy="l2canon">Sao chép</button><span></span></pre>
+    <h3>Chữ ký vừa tính lại (vnp_SecureHash)</h3>
+    <pre class="code" id="l2sig"><button class="copy sm" data-copy="l2sig">Sao chép</button><span></span></pre>
+    <h3>Chữ ký đã ký lần cuối</h3>
+    <pre class="code" id="l2signed"><span>(chưa ký)</span></pre>
+    <div class="note">Phía nhận (IPN) làm đúng như vậy: tính lại HMAC trên các tham số <code>vnp_*</code> (trừ <code>vnp_SecureHash</code>), rồi so sánh bằng <code>MessageDigest.isEqual</code> (thời gian hằng số, chống timing attack). Nếu lệch → <code>RspCode=97</code> và <b>không chạm DB</b>.</div>
+    <div class="note warn"><code>vnp_Amount</code> = số tiền VND × 100 (150000đ → <code>15000000</code>). <code>vnp_TxnRef</code> là <code>Transaction.id</code> (TSID), <b>không phải</b> orderId.</div>
+  </div>
+</section>
+
+<!-- 5 -->
+<section id="s-lab3">
+  <h2><span class="n">5</span>Lab 3 – Bộ quyết định IPN</h2>
+  <p class="lead">Chỉnh dữ liệu VNPay gửi về, bấm <b>Xử lý IPN</b>: các kiểm tra chạy đúng thứ tự trong <code>VnpayIpnService</code> → <code>VnpayIpnProcessor</code>. Kết quả luôn là HTTP 200 + <code>RspCode</code>.</p>
+  <div class="card">
+    <div class="row" style="margin-bottom:8px">
+      <span class="legend">Mẫu nhanh:</span>
+      <button class="chip" data-ipn="ok">✅ 00/00</button><button class="chip" data-ipn="decl">❌ 51</button>
+      <button class="chip" data-ipn="exp">⏱ 11</button><button class="chip" data-ipn="rev">⚠️ 07</button>
+      <button class="chip" data-ipn="mix">🤔 00/02</button><button class="chip" data-ipn="unk">❓ mã lạ</button>
+      <button class="chip" data-ipn="sig">🚫 sai chữ ký</button><button class="chip" data-ipn="amt">💸 sai tiền</button>
+      <button class="chip" data-ipn="dup">🔁 đã xử lý</button><button class="chip" data-ipn="nf">🔍 không có GD</button>
+    </div>
+    <div class="form">
+      <div><label>vnp_ResponseCode</label><select id="i_rc"></select></div>
+      <div><label>vnp_TransactionStatus</label><select id="i_ts"></select></div>
+      <div><label>vnp_TxnRef</label><input id="i_ref" value="7351234567890123" class="mono"></div>
+      <div><label>vnp_Amount gửi về</label><input id="i_amt" value="15000000" class="mono"></div>
+      <div><label>Số tiền đã lưu (VND)</label><input id="i_exp" value="150000"></div>
+      <div><label>Trạng thái transaction hiện tại</label><select id="i_tx"><option>PENDING</option><option>SUCCESS</option><option>FAILED</option><option>EXPIRED</option><option>REVIEW_REQUIRED</option></select></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label style="margin:0"><input type="checkbox" id="i_sig" checked> chữ ký hợp lệ</label>
+      <label style="margin:0"><input type="checkbox" id="i_tmn" checked> TmnCode khớp</label>
+      <label style="margin:0"><input type="checkbox" id="i_full" checked> đủ tham số bắt buộc</label>
+      <label style="margin:0"><input type="checkbox" id="i_exist" checked> transaction tồn tại</label>
+      <label style="margin:0"><input type="checkbox" id="i_meth" checked> method=VNPAY &amp; VND</label>
+    </div>
+    <div class="row" style="margin-top:10px"><button id="i_go" class="pri">⚙️ Xử lý IPN</button><span id="i_res"></span></div>
+    <ul class="trace" id="i_trace"></ul>
+    <div id="i_trans"></div>
+  </div>
+</section>
+
+<!-- 6 -->
+<section id="s-lab4">
+  <h2><span class="n">6</span>Lab 4 – Đối soát khi mất IPN (QueryDR)</h2>
+  <p class="lead">Nếu VNPay không gọi được IPN (tunnel sập, server down…), <code>VnpayReconciliationScheduler</code> (mỗi 5 phút) hỏi lại VNPay bằng QueryDR cho các charge còn <code>PENDING</code> đã quá <code>expired_at</code>. Tối đa 12 lần.</p>
+  <div class="card">
+    <div class="row">
+      <span>Transaction: <span id="r_tx" class="tag t-warn">PENDING</span></span>
+      <span>Payment: <span id="r_pay" class="tag t-warn">PENDING</span></span>
+      <span>attempts: <b id="r_att">0</b>/12</span>
+      <span id="r_ex"></span>
+    </div>
+    <div class="prog"><i id="r_prog"></i></div>
+    <div class="row">
+      <span class="legend">Kết quả QueryDR giả lập:</span>
+      <button data-q="PENDING">⏳ PENDING (chưa có kết quả)</button>
+      <button data-q="RETRY">📡 RETRY (lỗi mạng/timeout)</button>
+      <button data-q="SUCCESS">✅ SUCCESS</button>
+      <button data-q="FAILED">❌ FAILED</button>
+      <button data-q="REVIEW_REQUIRED">⚠️ REVIEW_REQUIRED</button>
+      <button id="r_reset">↺ Làm lại</button>
+      <button id="r_auto">⏩ Chạy hết (toàn PENDING)</button>
+    </div>
+    <h3>Nhật ký</h3>
+    <ol id="r_log" class="mono" style="padding-left:20px;margin:6px 0"></ol>
+    <div class="note">Mỗi lượt: khoá hàng transaction (<code>findByIdForUpdate</code>) → nếu đã terminal thì bỏ qua (<b>không bao giờ ghi đè</b>) → <code>recordReconciliationAttempt</code> (attempts++ <i>kể cả khi thành công</i>) → áp kết quả. Khi attempts ≥ 12 mà vẫn chưa ra kết quả: <code>reconciliation_exhausted=true</code>, payment <b>giữ PENDING</b> chờ xử lý thủ công.</div>
+  </div>
+</section>
+
+<!-- 7 -->
+<section id="s-state">
+  <h2><span class="n">7</span>Máy trạng thái Payment &amp; Transaction</h2>
+  <p class="lead">Bấm các hành động domain để thử. Chuyển sai trạng thái sẽ ném <code>IllegalStateException</code> như code thật.</p>
+  <div class="grid g2">
+    <div class="card">
+      <b>Payment (aggregate root)</b>
+      <div class="states" id="pStates"></div>
+      <div class="row" id="pBtns"></div>
+      <div id="pMsg" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <b>Transaction (CHARGE)</b>
+      <div class="states" id="tStates"></div>
+      <div class="row" id="tBtns"></div>
+      <div id="tMsg" style="margin-top:8px"></div>
+    </div>
+  </div>
+  <div class="row" style="margin-top:8px"><button id="stReset">↺ Đặt lại cả hai về PENDING</button></div>
+  <div class="note warn">Lưu ý: với Transaction, <code>isTerminal()</code> = “khác PENDING” — kể cả <code>REVIEW_REQUIRED</code>. Vì vậy IPN đến sau khi đã REVIEW_REQUIRED sẽ nhận <code>RspCode=02</code>; muốn đổi trạng thái phải duyệt thủ công.</div>
+</section>
+
+<!-- 8 -->
+<section id="s-know">
+  <h2><span class="n">8</span>Kiến thức cần biết</h2>
+  <div class="row" style="margin:8px 0">
+    <input id="kSearch" placeholder="🔎 Tìm trong kiến thức…" style="flex:1;min-width:200px">
+    <button id="kOpen">Mở hết</button><button id="kClose">Thu gọn</button>
+  </div>
+  <div id="know"></div>
+</section>
+
+<!-- 9 -->
+<section id="s-codes">
+  <h2><span class="n">9</span>Bảng tra mã</h2>
+  <div class="row" style="margin:8px 0" id="codeFilter"></div>
+  <div class="card"><table><thead><tr><th>Mã</th><th>Nhóm</th><th>Ý nghĩa / hành vi module</th></tr></thead><tbody id="codeBody"></tbody></table></div>
+</section>
+
+<!-- 10 -->
+<section id="s-quiz">
+  <h2><span class="n">10</span>Quiz kiểm tra</h2>
+  <div id="quiz"></div>
+  <div class="row"><button id="qReset">↺ Làm lại</button><b id="qScore"></b></div>
+</section>
+
+<p class="lead" style="margin-top:30px">Trang này chỉ minh hoạ; nguồn sự thật vẫn là code và <code>doc/PRODUCTION_READINESS_ROADMAP.md</code>. MoMo/bank hiện chỉ là skeleton bị tắt.</p>
+</main>
+<button id="toTop" title="Lên đầu trang">↑</button>
+
+<script>
+"use strict";
+/* ===================== tiện ích ===================== */
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const tagFor = s => ({PENDING:'t-warn',REVIEW_REQUIRED:'t-warn',SUCCESS:'t-ok',COMPLETED:'t-ok',FAILED:'t-bad',EXPIRED:'t-none',REFUNDED:'t-info',PARTIALLY_REFUNDED:'t-info'}[s]||'t-none');
+const tag = s => `<span class="tag ${tagFor(s)}">${esc(s)}</span>`;
+
+/* theme */
+$('#themeBtn').onclick = () => {
+  const d = document.documentElement, dark = d.dataset.theme !== 'dark';
+  d.dataset.theme = dark ? 'dark' : 'light';
+  $('#themeBtn').textContent = dark ? '☀️ Sáng' : '🌙 Tối';
+};
+/* progress + toTop + nav highlight */
+addEventListener('scroll', () => {
+  const h = document.documentElement;
+  $('#progress').style.width = (h.scrollTop / Math.max(1, h.scrollHeight - h.clientHeight) * 100) + '%';
+  $('#toTop').style.display = h.scrollTop > 500 ? 'block' : 'none';
+  let cur = null;
+  $$('section').forEach(s => { if (s.getBoundingClientRect().top < 120) cur = s.id; });
+  $$('#nav a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + cur));
+});
+$('#toTop').onclick = () => scrollTo({top:0});
+/* copy */
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-copy]'); if (!b) return;
+  const t = $('#' + b.dataset.copy + ' span').textContent;
+  (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(
+    () => { b.textContent = 'Đã chép ✓'; setTimeout(() => b.textContent = 'Sao chép', 1200); },
+    () => { b.textContent = 'Chọn & Ctrl+C'; setTimeout(() => b.textContent = 'Sao chép', 1500); });
+});
+
+/* ===================== 1. Kiến trúc ===================== */
+const LAYERS = [
+  {id:'presentation', name:'presentation', sub:'Cổng HTTP vào',
+   desc:'Nhận request HTTP, ánh xạ sang command và trả lỗi theo một envelope thống nhất.',
+   cls:['PaymentController – POST /api/v1/payments','WebhookController – IPN (GET /api/v1/payments/webhook/vnpay) và Return URL','GlobalExceptionHandler – {code, message, traceId, timestamp, fieldErrors}'],
+   rule:'IPN luôn trả HTTP 200 kèm RspCode của VNPay; API merchant dùng mã HTTP chuẩn (400/409…).'},
+  {id:'application', name:'application', sub:'Use case + cổng (port)',
+   desc:'Điều phối nghiệp vụ. Định nghĩa port vào (use case) và port ra (provider, verifier, lock, query). Không biết JPA hay HTTP.',
+   cls:['PaymentService – createPayment (idempotency, khoá, ghi DB)','VnpayIpnService – verify chữ ký trước khi chạm DB','VnpayIpnProcessor – @Transactional, khoá hàng, map mã → trạng thái','VnpayReconciliationService/Processor – QueryDR','ApiException – HTTP status + error code + Retry-After','Port out: PaymentProvider, WebhookVerifier, IdempotencyLock, VnpayTransactionQuery'],
+   rule:'Tên port theo năng lực (CreatePaymentUseCase); tên adapter theo vai trò (VnpayAdapter, PaymentRepositoryImpl).'},
+  {id:'domain', name:'domain', sub:'Lõi nghiệp vụ',
+   desc:'Chứa luật trạng thái, không phụ thuộc Spring hay provider.',
+   cls:['Payment (aggregate root) – markCompleted/Failed/Expired/ReviewRequired/Refunded…','Transaction – CHARGE/REFUND, markSuccess/…, reconciliation attempts','Money – chuẩn hoá số tiền + tiền tệ','IdempotencyKey – state IN_PROGRESS/COMPLETED, hết hạn 24h','Repository interfaces'],
+   rule:'ID dạng TSID (@Tsid) nên có trước khi INSERT trả về → dùng được làm vnp_TxnRef.'},
+  {id:'adapter', name:'adapter/out/provider', sub:'Nói chuyện với VNPay',
+   desc:'Triển khai port ra cho VNPay: tạo URL, ký/verify, QueryDR.',
+   cls:['VnpayAdapter – dựng tham số vnp_* và checkout URL','VnpaySignatureService – canonicalize + HMAC-SHA512 + so sánh hằng thời gian','VnpayIpnVerifier – gom tham số, bỏ SecureHash, verify','VnpayQueryDrClient/Codec – gọi API tra cứu có chữ ký','VnpayProperties – cấu hình validate từ payment.providers.vnpay.*'],
+   rule:'MomoAdapter / BankAdapter chỉ là skeleton bị tắt.'},
+  {id:'infra', name:'infrastructure', sub:'Hạ tầng',
+   desc:'JPA repository, khoá, lịch chạy, Clock.',
+   cls:['PaymentRepositoryImpl / TransactionRepositoryImpl (findByIdForUpdate)','PostgresIdempotencyLock – pg_try_advisory_xact_lock','VnpayReconciliationScheduler – @Scheduled mỗi 5 phút','Bean Clock (test truyền Clock cố định)','Flyway: V1 schema, V2 reconciliation, V3 paid_at'],
+   rule:'Flyway sở hữu schema; Hibernate chỉ validate. Thêm field entity = phải có migration mới.'}
+];
+function renderLayers(sel){
+  $('#layers').innerHTML = LAYERS.map(l => `<button class="layer ${l.id===sel?'on':''}" data-l="${l.id}"><span><b>${l.name}</b><br><small>${l.sub}</small></span><span>›</span></button>`).join('');
+  const l = LAYERS.find(x => x.id === sel);
+  $('#layerInfo').innerHTML = `<h3 style="margin-top:0">${l.name}</h3><p>${l.desc}</p><ul>${l.cls.map(c=>`<li>${esc(c)}</li>`).join('')}</ul><div class="note">${l.rule}</div>`;
+  $$('#layers .layer').forEach(b => b.onclick = () => renderLayers(b.dataset.l));
+}
+renderLayers('application');
+
+/* ===================== 2. Sơ đồ tuần tự ===================== */
+const ACT = [
+  {k:'C',name:'Merchant / Client'},{k:'S',name:'Payment Service'},{k:'D',name:'PostgreSQL'},{k:'B',name:'Trình duyệt khách'},{k:'V',name:'VNPay'}
+];
+const AI = {C:0,S:1,D:2,B:3,V:4};
+const X = (f,t,l,n,c,s,tone) => ({f,t,l,n,c,s,tone});
+
+function createSteps(){
+  return [
+    X('C','S','POST /api/v1/payments + Idempotency-Key','Merchant gửi orderId, amount, currency=VND, method=VNPAY, header <code>Idempotency-Key</code> (8–128 ký tự ASCII hiển thị được) và IP khách.','PaymentController → PaymentService#createPayment',['—','—']),
+    X('S','S','validateCreateCommand','Kiểm: orderId &gt; 0; currency = VND; amount là số nguyên ≥ 5000; amount×100 tối đa 12 chữ số; Idempotency-Key hợp lệ; có client IP. Sai → 400 (INVALID_AMOUNT, INVALID_IDEMPOTENCY_KEY…). Method khác VNPAY → PAYMENT_METHOD_NOT_SUPPORTED.','PaymentService#validateCreateCommand'),
+    X('S','D','advisory lock: key-hash rồi order-id','Lấy 2 khoá <code>pg_try_advisory_xact_lock</code> theo thứ tự cố định (SHA-256 của key, rồi của <code>CREATE_PAYMENT_ORDER|orderId</code>). Không lấy được trong 2s → 409 IDEMPOTENCY_IN_PROGRESS / PAYMENT_IN_PROGRESS + Retry-After. Khoá tự nhả khi transaction kết thúc.','PostgresIdempotencyLock#tryLock'),
+    X('S','D','tra idempotency_key &amp; payment active','Nếu key đã có và chưa hết hạn → replay (cùng request_hash) hoặc 409 IDEMPOTENCY_CONFLICT (khác hash). Nếu order đã có payment PENDING/REVIEW_REQUIRED → 409 PAYMENT_ALREADY_PENDING.','PaymentService#replay · PaymentRepository#findActiveByOrderId'),
+    X('S','D','INSERT Payment + Transaction (CHARGE)','Lưu <code>Payment(PENDING)</code> rồi <code>Transaction(PENDING, expiredAt = now + expiryMinutes)</code>. ID TSID đã có sau saveAndFlush → dùng làm <code>vnp_TxnRef</code>.','Payment.create · Transaction.createCharge',['PENDING','PENDING']),
+    X('S','S','ký checkout URL (HMAC-SHA512)','VnpayAdapter dựng ~13 tham số vnp_*, sắp xếp + encode + ký. Thuần tính toán cục bộ (không gọi mạng) nên chấp nhận được khi đang giữ DB transaction.','VnpayAdapter#processPayment · VnpaySignatureService#sign'),
+    X('S','D','attachCheckout + idempotency=COMPLETED','Lưu checkoutUrl vào transaction, đánh dấu idempotency_key COMPLETED (hết hạn sau 24h) và COMMIT → nhả advisory lock.','Transaction#attachCheckout · IdempotencyKey#complete'),
+    X('S','C','201 { paymentId, checkoutUrl }','Trả URL thanh toán. Không bao giờ ghi log URL đầy đủ hay chữ ký.','PaymentMapper#toResponseDTO'),
+    X('C','B','chuyển hướng trình duyệt tới checkoutUrl','Merchant redirect khách sang cổng VNPay (hosted checkout). Module không bao giờ thấy số thẻ/CVV.'),
+    X('B','V','khách chọn ngân hàng / QR và thanh toán','Khách thao tác trên trang VNPay. Kết quả sẽ đến theo 2 đường: IPN (server-to-server, đáng tin) và Return URL (qua trình duyệt, chỉ để hiển thị).')
+  ];
+}
+const ipnCommon = (rc, ts) => [
+  X('V','S',`GET IPN (ResponseCode=${rc}, Status=${ts})`,'VNPay gọi server-to-server <code>GET /api/v1/payments/webhook/vnpay?vnp_...</code> kèm <code>vnp_SecureHash</code>.','WebhookController → VnpayIpnService#process'),
+  X('S','S','verify chữ ký TRƯỚC khi chạm DB','Bỏ <code>vnp_SecureHash</code>/<code>SecureHashType</code>, tính lại HMAC, so sánh hằng thời gian. Sai → RspCode 97 (hoặc 99 nếu tham số méo), dừng ngay, chưa có truy vấn DB nào.','VnpayIpnVerifier#verify · VnpaySignatureService#verify'),
+  X('S','S','kiểm vnp_TmnCode','TmnCode phải khớp cấu hình của merchant, sai → RspCode 99.','VnpayIpnService#process'),
+  X('S','D','SELECT … FOR UPDATE transaction','Khoá hàng transaction theo <code>vnp_TxnRef</code> → hai IPN trùng/đua sẽ xếp hàng, không xử lý song song.','TransactionRepository#findByIdForUpdate'),
+  X('S','S','kiểm method, currency, amount×100, terminal?','VNPAY + VND; <code>vnp_Amount == amount × 100</code> (sai → 04); transaction đã khác PENDING hoặc payment không còn PENDING → 02.','VnpayIpnProcessor#processVerified')
+];
+const returnTail = [
+  X('V','B','redirect về ReturnUrl','VNPay đưa khách về <code>vnp_ReturnUrl</code> kèm kết quả trên query string.'),
+  X('B','S','GET /webhook/vnpay/return (chỉ UX)','Return URL <b>không bao giờ</b> đổi trạng thái: khách có thể đóng tab, sửa URL hoặc không bao giờ quay lại. Nó chỉ dùng để hiển thị “đang xử lý/đã xong”.','WebhookController (return)')
+];
+function ipnOutcome(rc, ts, mapNote, pay, tx, rsp, tone){
+  return [
+    X('S','S',`map mã ${rc}/${ts} → ${tx}`, mapNote, 'VnpayIpnProcessor#processVerified'),
+    X('S','D','UPDATE payment + transaction','Lưu cả hai trong cùng DB transaction rồi COMMIT (nhả khoá hàng).','PaymentRepository#save · TransactionRepository#save',[pay,tx],tone),
+    X('S','V',`200 { RspCode: "${rsp}" }`,'Luôn HTTP 200; <code>RspCode=00</code> nghĩa là “đã ghi nhận” để VNPay ngừng gọi lại.','VnpayIpnResponse.processed()',null,tone)
+  ];
+}
+
+const SCEN = [
+ {id:'ok',icon:'✅',name:'Thành công',desc:'Khách trả tiền thành công: <code>ResponseCode=00</code> <b>và</b> <code>TransactionStatus=00</code> (cả hai, thiếu một là không đủ).',
+  steps:()=>[...createSteps(),...ipnCommon('00','00'),...ipnOutcome('00','00','Chỉ khi cả <code>vnp_ResponseCode=00</code> và <code>vnp_TransactionStatus=00</code> mới thành công. <code>payment.markCompleted()</code>, <code>transaction.markSuccess(vnp_TransactionNo)</code>.','COMPLETED','SUCCESS','00','ok'),...returnTail]},
+ {id:'decl',icon:'❌',name:'Bị từ chối (51)',desc:'Ngân hàng từ chối, ví dụ 51 = không đủ số dư. Nằm trong tập mã từ chối đã biết → FAILED.',
+  steps:()=>[...createSteps(),...ipnCommon('51','02'),...ipnOutcome('51','02','51 thuộc <code>DECLINED_CODES</code> (09,10,12,13,24,51,65,75,79,99) và TransactionStatus ≠ 00 → <code>markFailed</code>. Payment FAILED, merchant có thể tạo lại thanh toán (order không còn “active”).','FAILED','FAILED','00','bad'),...returnTail]},
+ {id:'exp',icon:'⏱',name:'Hết hạn (11)',desc:'Khách để quá thời gian thanh toán, VNPay báo mã 11.',
+  steps:()=>[...createSteps(),...ipnCommon('11','02'),...ipnOutcome('11','02','<code>11</code> = hết thời gian chờ → <code>payment.markExpired()</code> + <code>transaction.markExpired()</code>.','EXPIRED','EXPIRED','00','warn'),...returnTail]},
+ {id:'rev',icon:'⚠️',name:'Nghi ngờ (07)',desc:'VNPay trừ tiền nhưng đánh dấu giao dịch đáng ngờ (07). Không tự coi là thành công, chuyển sang xem xét thủ công.',
+  steps:()=>[...createSteps(),...ipnCommon('07','00'),...ipnOutcome('07','00','<code>07</code> với status 00 hoặc 07 → <code>markReviewRequired</code>. Tiền có thể đã bị trừ nên không được giao hàng tự động và cũng không cho tạo payment mới (order vẫn “active”).','REVIEW_REQUIRED','REVIEW_REQUIRED','00','warn'),...returnTail]},
+ {id:'miss',icon:'📭',name:'Mất IPN → đối soát',desc:'Khách đã trả tiền nhưng IPN không bao giờ tới (tunnel sập, server restart…). Scheduler hỏi lại VNPay bằng QueryDR.',
+  steps:()=>[...createSteps(),
+   X('V','S','IPN thất bại / không tới','Server không nhận được IPN. Payment và Transaction vẫn PENDING.','—',['PENDING','PENDING'],'bad'),
+   X('V','B','redirect ReturnUrl (khách thấy “đang xử lý”)','Return URL không đổi trạng thái nên hệ thống vẫn không biết kết quả.'),
+   X('S','D','Scheduler (5 phút): tìm charge PENDING quá expired_at','<code>findReconciliationCandidates</code>: type=CHARGE, status=PENDING, chưa exhausted, <code>next_reconciliation_at ≤ now</code>.','VnpayReconciliationScheduler#reconcileDueTransactions'),
+   X('S','V','QueryDR (có chữ ký, timeout 3s/5s)','Gửi yêu cầu <code>querydr</code> ký bằng HMAC; response cũng được verify chữ ký trước khi tin.','VnpayQueryDrClient / VnpayQueryDrCodec'),
+   X('V','S','kết quả: thành công','VNPay trả giao dịch đã thành công.'),
+   X('S','D','khoá hàng, attempts++, áp kết quả','Nếu transaction đã terminal thì bỏ qua (không ghi đè). Ngược lại ghi attempt rồi <code>markSuccess</code> + <code>markCompleted</code>.','VnpayReconciliationProcessor#apply',['COMPLETED','SUCCESS'],'ok')]},
+ {id:'dup',icon:'🔁',name:'IPN trùng',desc:'VNPay gửi lại IPN (do retry). Lần hai phải idempotent: trả 02, không đổi gì.',
+  steps:()=>[...createSteps(),...ipnCommon('00','00'),...ipnOutcome('00','00','Thành công như kịch bản ✅.','COMPLETED','SUCCESS','00','ok'),
+   X('V','S','IPN lần 2 (cùng nội dung)','VNPay retry vì chưa nhận được ACK kịp thời, hoặc do mạng.'),
+   X('S','D','FOR UPDATE → transaction đã SUCCESS','Chữ ký hợp lệ, số tiền khớp, nhưng <code>transaction.isTerminal()</code> = true.','VnpayIpnProcessor#processVerified',['COMPLETED','SUCCESS']),
+   X('S','V','200 { RspCode: "02" }','“Order already confirmed”. Không có UPDATE nào, trạng thái giữ nguyên → an toàn khi bị gọi nhiều lần.','VnpayIpnResponse.alreadyConfirmed()',null,'warn')]},
+ {id:'sig',icon:'🚫',name:'Sai chữ ký (giả mạo)',desc:'Kẻ tấn công tự gọi URL IPN để “báo đã trả tiền”. Chữ ký không khớp ⇒ bị chặn trước khi chạm DB.',
+  steps:()=>[...createSteps(),
+   X('V','S','IPN giả (ResponseCode=00, chữ ký sai)','Kẻ gian biết URL IPN nhưng không có hash secret nên không tính được HMAC đúng.','WebhookController → VnpayIpnService#process',['PENDING','PENDING'],'bad'),
+   X('S','S','verify chữ ký ⇒ KHÔNG khớp','So sánh hằng thời gian (<code>MessageDigest.isEqual</code>). Chuỗi hex phải đúng 128 ký tự, nếu không bị loại ngay.','VnpaySignatureService#verify',null,'bad'),
+   X('S','V','200 { RspCode: "97" }','“Invalid signature”. Chỉ ghi log cảnh báo (không log chữ ký). Không có truy vấn DB nào, trạng thái vẫn PENDING.','VnpayIpnService#process',['PENDING','PENDING'],'bad')]},
+ {id:'amt',icon:'💸',name:'Sai số tiền',desc:'Chữ ký đúng nhưng <code>vnp_Amount</code> không bằng số tiền đã lưu ×100 (lỗi hệ thống hoặc dữ liệu bị thao túng ở nguồn).',
+  steps:()=>[...createSteps(),...ipnCommon('00','00').slice(0,4),
+   X('S','S','amount×100 ≠ vnp_Amount','So sánh BigInteger: số đã lưu × 100 với <code>vnp_Amount</code>. Lệch → dừng, không đổi trạng thái.','VnpayIpnProcessor#processVerified',['PENDING','PENDING'],'bad'),
+   X('S','V','200 { RspCode: "04" }','“Invalid amount”. Giao dịch giữ PENDING để đối soát/điều tra thủ công thay vì tự đánh dấu thành công.','VnpayIpnResponse.amountMismatch()',null,'bad')]},
+ {id:'replay',icon:'♻️',name:'Idempotency: replay',desc:'Client timeout rồi gửi lại cùng Idempotency-Key và cùng body → nhận lại đúng kết quả cũ, không tạo thêm payment.',
+  steps:()=>[...createSteps().slice(0,8),
+   X('C','S','(timeout, retry) cùng key + cùng body','Merchant không nhận được response nên gửi lại y hệt.','PaymentService#createPayment',['PENDING','PENDING']),
+   X('S','D','advisory lock → tìm thấy idempotency_key COMPLETED','Chưa hết hạn (24h) và <code>request_hash</code> (SHA-256 của orderId|amount|currency|method) trùng.','PaymentService#replay'),
+   X('S','C','201 – cùng paymentId + checkoutUrl cũ','Không INSERT thêm. Merchant có thể retry vô hạn mà không sinh thanh toán trùng.','PaymentMapper#toResponseDTO(payment, transaction)',['PENDING','PENDING'],'ok')]},
+ {id:'conf',icon:'⚔️',name:'Idempotency: conflict',desc:'Dùng lại cùng key nhưng đổi nội dung (ví dụ amount) → từ chối, tránh nhầm lẫn giữa hai giao dịch khác nhau.',
+  steps:()=>[...createSteps().slice(0,8),
+   X('C','S','cùng key nhưng amount khác','Có thể là bug phía client hoặc tấn công replay có sửa đổi.','PaymentService#createPayment',['PENDING','PENDING']),
+   X('S','D','tìm thấy key, request_hash khác','Hash tính từ orderId|amount|currency|method. Khác hash ⇒ khác ý định.','PaymentService#replay'),
+   X('S','C','409 IDEMPOTENCY_CONFLICT','Không thay đổi DB. Client phải dùng Idempotency-Key mới cho request mới.','ApiException',['PENDING','PENDING'],'bad')]}
+];
+
+let sc = SCEN[0], steps = [], cur = 0, timer = null;
+function loadScenario(id){
+  stopAuto(); sc = SCEN.find(s => s.id === id); steps = sc.steps(); cur = 0;
+  // propagate db state
+  let st = ['—','—'];
+  steps.forEach(s => { if (s.s) st = s.s; s.state = st; });
+  $$('#scenBtns .chip').forEach(b => b.classList.toggle('on', b.dataset.id === id));
+  $('#scenDesc').innerHTML = `<b>${sc.icon} ${sc.name}</b> – ${sc.desc}`;
+  drawSeq(); showStep();
+}
+$('#scenBtns').innerHTML = SCEN.map(s => `<button class="chip" data-id="${s.id}">${s.icon} ${s.name}</button>`).join('');
+$$('#scenBtns .chip').forEach(b => b.onclick = () => loadScenario(b.dataset.id));
+
+const W = 1000, ROW = 34, TOP = 56;
+const ax = i => 100 + i * 200;
+function drawSeq(){
+  const H = TOP + steps.length * ROW + 24;
+  let g = `<defs><marker id="ah" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>`;
+  ACT.forEach((a, i) => {
+    g += `<rect x="${ax(i)-70}" y="8" width="140" height="30" rx="8" fill="var(--infobg)" stroke="var(--accent)"/><text x="${ax(i)}" y="28" text-anchor="middle" font-size="13" font-weight="600" fill="var(--ink)">${a.name}</text>`;
+    g += `<line x1="${ax(i)}" y1="40" x2="${ax(i)}" y2="${H-8}" stroke="var(--line)" stroke-dasharray="4 4"/>`;
+  });
+  steps.forEach((s, i) => {
+    const y = TOP + i * ROW + 14, x1 = ax(AI[s.f]), x2 = ax(AI[s.t]);
+    const col = {ok:'var(--ok)',bad:'var(--bad)',warn:'var(--warn)'}[s.tone] || 'var(--accent)';
+    let body;
+    if (s.f === s.t) {
+      body = `<path d="M${x1},${y-8} h46 v16 h-46" fill="none" stroke="${col}" stroke-width="2" marker-end="url(#ah)"/><text class="lbl" x="${x1+54}" y="${y+4}" font-size="12" fill="var(--ink)">${i+1}. ${s.l}</text>`;
+    } else {
+      const mid = (x1 + x2) / 2;
+      body = `<line x1="${x1}" y1="${y}" x2="${x2 + (x2>x1?-2:2)}" y2="${y}" stroke="${col}" stroke-width="2" marker-end="url(#ah)"/><text class="lbl" x="${mid}" y="${y-5}" text-anchor="middle" font-size="12" fill="var(--ink)">${i+1}. ${s.l}</text>`;
+    }
+    g += `<g class="arrow" data-i="${i}" style="color:${col}"><rect x="0" y="${y-ROW/2+2}" width="${W}" height="${ROW-2}" fill="transparent" class="hit"/>${body}</g>`;
+  });
+  const svg = $('#seq'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = g;
+  $$('#seq .arrow').forEach(a => a.onclick = () => { stopAuto(); cur = +a.dataset.i; showStep(); });
+}
+function showStep(){
+  const s = steps[cur];
+  $$('#seq .arrow').forEach((a, i) => {
+    a.style.opacity = i > cur ? .22 : 1;
+    const r = $('.hit', a); r.setAttribute('fill', i === cur ? 'var(--infobg)' : 'transparent');
+  });
+  $('#stepCount').textContent = `Bước ${cur+1} / ${steps.length}`;
+  $('#stepProg').style.width = ((cur + 1) / steps.length * 100) + '%';
+  const from = ACT[AI[s.f]].name, to = ACT[AI[s.t]].name;
+  $('#stepInfo').innerHTML = `<b>${cur+1}. ${s.l}</b><div class="legend" style="margin:4px 0">${from} ${s.f===s.t?'(nội bộ)':'→ '+to}</div><p>${s.n}</p>`;
+  $('#dbState').innerHTML = `<div>Payment ${s.state[0]==='—'?'<span class="tag t-none">chưa có</span>':tag(s.state[0])}</div><div>Transaction ${s.state[1]==='—'?'<span class="tag t-none">chưa có</span>':tag(s.state[1])}</div>`;
+  $('#stepCode').innerHTML = s.c ? `<div class="legend">Code liên quan</div><code>${esc(s.c)}</code>` : '';
+  $('#bPrev').disabled = cur === 0; $('#bNext').disabled = cur === steps.length - 1;
+}
+function stopAuto(){ if (timer) { clearInterval(timer); timer = null; } $('#bAuto').textContent = '▶ Tự chạy'; }
+$('#bNext').onclick = () => { stopAuto(); if (cur < steps.length - 1) { cur++; showStep(); } };
+$('#bPrev').onclick = () => { stopAuto(); if (cur > 0) { cur--; showStep(); } };
+$('#bReset').onclick = () => { stopAuto(); cur = 0; showStep(); };
+$('#bAuto').onclick = () => {
+  if (timer) { stopAuto(); return; }
+  if (cur >= steps.length - 1) cur = 0;
+  showStep(); $('#bAuto').textContent = '⏸ Dừng';
+  timer = setInterval(() => { if (cur < steps.length - 1) { cur++; showStep(); } else stopAuto(); }, +$('#speed').value);
+};
+$('#speed').onchange = () => { if (timer) { stopAuto(); $('#bAuto').click(); } };
+addEventListener('keydown', e => {
+  if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  if (e.key === 'ArrowRight') $('#bNext').click(); if (e.key === 'ArrowLeft') $('#bPrev').click();
+});
+loadScenario('ok');
+
+/* --- băm thuần JS (dự phòng khi không có crypto.subtle, vd. mở qua data:/http) --- */
+const PureHash = (() => {
+  const K256 = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  const K512 = ('428a2f98d728ae22 7137449123ef65cd b5c0fbcfec4d3b2f e9b5dba58189dbbc 3956c25bf348b538 59f111f1b605d019 923f82a4af194f9b ab1c5ed5da6d8118 d807aa98a3030242 12835b0145706fbe 243185be4ee4b28c 550c7dc3d5ffb4e2 72be5d74f27b896f 80deb1fe3b1696b1 9bdc06a725c71235 c19bf174cf692694 e49b69c19ef14ad2 efbe4786384f25e3 0fc19dc68b8cd5b5 240ca1cc77ac9c65 2de92c6f592b0275 4a7484aa6ea6e483 5cb0a9dcbd41fbd4 76f988da831153b5 983e5152ee66dfab a831c66d2db43210 b00327c898fb213f bf597fc7beef0ee4 c6e00bf33da88fc2 d5a79147930aa725 06ca6351e003826f 142929670a0e6e70 27b70a8546d22ffc 2e1b21385c26c926 4d2c6dfc5ac42aed 53380d139d95b3df 650a73548baf63de 766a0abb3c77b2a8 81c2c92e47edaee6 92722c851482353b a2bfe8a14cf10364 a81a664bbc423001 c24b8b70d0f89791 c76c51a30654be30 d192e819d6ef5218 d69906245565a910 f40e35855771202a 106aa07032bbd1b8 19a4c116b8d2d0c8 1e376c085141ab53 2748774cdf8eeb99 34b0bcb5e19b48a8 391c0cb3c5c95a63 4ed8aa4ae3418acb 5b9cca4f7763e373 682e6ff3d6b2b8a3 748f82ee5defb2fc 78a5636f43172f60 84c87814a1f0ab72 8cc702081a6439ec 90befffa23631e28 a4506cebde82bde9 bef9a3f7b2c67915 c67178f2e372532b ca273eceea26619c d186b8c721c0c207 eada7dd6cde0eb1e f57d4f7fee6ed178 06f067aa72176fba 0a637dc5a2c898a6 113f9804bef90dae 1b710b35131c471b 28db77f523047d84 32caab7b40c72493 3c9ebe0a15c9bebc 431d67c49c100d4c 4cc5d4becb3e42b6 597f299cfc657e2a 5fcb6fab3ad6faec 6c44198c4a475817').split(' ').map(h => BigInt('0x' + h));
+  const M64 = (1n << 64n) - 1n;
+  const rotr64 = (x, n) => ((x >> n) | (x << (64n - n))) & M64;
+  const pad = (bytes, block, lenBytes) => {
+    const l = bytes.length, total = Math.ceil((l + 1 + lenBytes) / block) * block, out = new Uint8Array(total);
+    out.set(bytes); out[l] = 0x80;
+    const bits = BigInt(l) * 8n;
+    for (let i = 0; i < 8; i++) out[total - 1 - i] = Number((bits >> BigInt(8 * i)) & 0xffn);
+    return out;
+  };
+  function sha256(bytes){
+    const H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19], d = pad(bytes, 64, 8), w = new Array(64);
+    const rr = (x, n) => (x >>> n) | (x << (32 - n));
+    for (let o = 0; o < d.length; o += 64) {
+      for (let i = 0; i < 16; i++) w[i] = (d[o+4*i] << 24) | (d[o+4*i+1] << 16) | (d[o+4*i+2] << 8) | d[o+4*i+3];
+      for (let i = 16; i < 64; i++) {
+        const s0 = rr(w[i-15],7) ^ rr(w[i-15],18) ^ (w[i-15] >>> 3), s1 = rr(w[i-2],17) ^ rr(w[i-2],19) ^ (w[i-2] >>> 10);
+        w[i] = (w[i-16] + s0 + w[i-7] + s1) | 0;
+      }
+      let [a,b,c,dd,e,f,g,h] = H;
+      for (let i = 0; i < 64; i++) {
+        const t1 = (h + (rr(e,6) ^ rr(e,11) ^ rr(e,25)) + ((e & f) ^ (~e & g)) + K256[i] + w[i]) | 0;
+        const t2 = ((rr(a,2) ^ rr(a,13) ^ rr(a,22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+        h = g; g = f; f = e; e = (dd + t1) | 0; dd = c; c = b; b = a; a = (t1 + t2) | 0;
+      }
+      [a,b,c,dd,e,f,g,h].forEach((v, i) => H[i] = (H[i] + v) | 0);
+    }
+    const out = new Uint8Array(32); H.forEach((v, i) => { for (let j = 0; j < 4; j++) out[4*i+j] = (v >>> (24 - 8*j)) & 255; });
+    return out;
+  }
+  function sha512(bytes){
+    const H = ['6a09e667f3bcc908','bb67ae8584caa73b','3c6ef372fe94f82b','a54ff53a5f1d36f1','510e527fade682d1','9b05688c2b3e6c1f','1f83d9abfb41bd6b','5be0cd19137e2179'].map(h => BigInt('0x' + h));
+    const d = pad(bytes, 128, 16), w = new Array(80);
+    for (let o = 0; o < d.length; o += 128) {
+      for (let i = 0; i < 16; i++) { let v = 0n; for (let j = 0; j < 8; j++) v = (v << 8n) | BigInt(d[o + 8*i + j]); w[i] = v; }
+      for (let i = 16; i < 80; i++) {
+        const s0 = rotr64(w[i-15],1n) ^ rotr64(w[i-15],8n) ^ (w[i-15] >> 7n), s1 = rotr64(w[i-2],19n) ^ rotr64(w[i-2],61n) ^ (w[i-2] >> 6n);
+        w[i] = (w[i-16] + s0 + w[i-7] + s1) & M64;
+      }
+      let [a,b,c,dd,e,f,g,h] = H;
+      for (let i = 0; i < 80; i++) {
+        const t1 = (h + (rotr64(e,14n) ^ rotr64(e,18n) ^ rotr64(e,41n)) + ((e & f) ^ (~e & M64 & g)) + K512[i] + w[i]) & M64;
+        const t2 = ((rotr64(a,28n) ^ rotr64(a,34n) ^ rotr64(a,39n)) + ((a & b) ^ (a & c) ^ (b & c))) & M64;
+        h = g; g = f; f = e; e = (dd + t1) & M64; dd = c; c = b; b = a; a = (t1 + t2) & M64;
+      }
+      [a,b,c,dd,e,f,g,h].forEach((v, i) => H[i] = (H[i] + v) & M64);
+    }
+    const out = new Uint8Array(64); H.forEach((v, i) => { for (let j = 0; j < 8; j++) out[8*i+j] = Number((v >> BigInt(56 - 8*j)) & 0xffn); });
+    return out;
+  }
+  function hmac512(keyBytes, msgBytes){
+    let k = keyBytes.length > 128 ? sha512(keyBytes) : keyBytes;
+    const ip = new Uint8Array(128).fill(0x36), op = new Uint8Array(128).fill(0x5c);
+    k.forEach((b, i) => { ip[i] ^= b; op[i] ^= b; });
+    const inner = sha512(new Uint8Array([...ip, ...msgBytes]));
+    return sha512(new Uint8Array([...op, ...inner]));
+  }
+  return {sha256, hmac512};
+})();
+const hex = u8 => [...u8].map(b => b.toString(16).padStart(2,'0')).join('');
+const enc = s => new TextEncoder().encode(s);
+
+/* ===================== 3. Lab 1 – tạo thanh toán ===================== */
+const L1 = {payments:[], keys:{}, nextId:7351000000000000n};
+const sha256 = async s => globalThis.crypto && crypto.subtle ? hex(new Uint8Array(await crypto.subtle.digest('SHA-256', enc(s)))) : hex(PureHash.sha256(enc(s)));
+function stripZeros(v){ // BigDecimal.stripTrailingZeros().toPlainString()
+  let s = String(v).trim(); if (!/^-?\d+(\.\d+)?$/.test(s)) return null;
+  if (s.includes('.')) s = s.replace(/0+$/,'').replace(/\.$/,''); return s;
+}
+async function l1submit(){
+  const order = Number($('#l1order').value), method = $('#l1method').value, cur = $('#l1cur').value,
+        key = $('#l1key').value, ip = $('#l1ip').value.trim(), rawAmt = $('#l1amount').value;
+  const out = (cls, code, http, msg, extra='') => { $('#l1out').className = 'note ' + cls; $('#l1out').innerHTML = `<b>HTTP ${http}</b> · <code>${code}</code> – ${msg}${extra}`; l1render(); };
+  // validateCreateCommand (đúng thứ tự trong code)
+  if (!Number.isInteger(order) || order <= 0) return out('bad','INVALID_ORDER_ID',400,'Order ID must be positive');
+  if (cur !== 'VND') return out('bad','INVALID_PAYMENT_REQUEST',400,'VNPay only supports VND');
+  const plain = stripZeros(rawAmt);
+  if (plain === null || plain.includes('.') || Number(plain) < 5000) return out('bad','INVALID_AMOUNT',400,'VNPay amount must be a whole VND amount of at least 5000');
+  if ((BigInt(plain) * 100n).toString().length > 12) return out('bad','INVALID_AMOUNT',400,'VNPay amount exceeds protocol limits');
+  if (!/^[\x21-\x7E]{8,128}$/.test(key)) return out('bad','INVALID_IDEMPOTENCY_KEY',400,'Idempotency-Key must contain 8 to 128 visible ASCII characters');
+  if (!ip || ip.length > 45) return out('bad','INVALID_CLIENT_IP',400,'Client IP is required');
+  if (method !== 'VNPAY') return out('bad','PAYMENT_METHOD_NOT_SUPPORTED',400,'Only VNPay is enabled in this release');
+  // khoá + idempotency
+  const keyHash = await sha256(key), reqHash = await sha256(`${order}|${plain}|${cur}|${method}`);
+  const ex = L1.keys[keyHash];
+  if (ex) {
+    if (ex.reqHash !== reqHash) return out('bad','IDEMPOTENCY_CONFLICT',409,'The idempotency key was already used with a different request','<br><small>request_hash cũ ≠ request_hash mới → từ chối, không đổi DB.</small>');
+    const p = L1.payments.find(x => x.id === ex.paymentId);
+    return out('ok','REPLAY',201,`trả lại payment cũ <code>${p.id}</code> (status hiện tại ${p.status}) – không tạo mới.`,'<br><small>Đây là hành vi mong muốn khi client retry.</small>');
+  }
+  if (L1.payments.some(p => p.orderId === order && (p.status === 'PENDING' || p.status === 'REVIEW_REQUIRED')))
+    return out('bad','PAYMENT_ALREADY_PENDING',409,'The order already has an active payment','<br><small>Active = PENDING hoặc REVIEW_REQUIRED. Key mới cũng không vượt qua được.</small>');
+  const id = (L1.nextId++).toString();
+  L1.payments.push({id, orderId: order, amount: plain, status: 'PENDING', tx: 'PENDING'});
+  L1.keys[keyHash] = {reqHash, state: 'COMPLETED', paymentId: id, kh: keyHash.slice(0,10)+'…', rh: reqHash.slice(0,10)+'…'};
+  out('ok','CREATED',201,`đã tạo Payment <code>${id}</code> + Transaction (vnp_TxnRef sẽ là id của Transaction), checkoutUrl đã ký.`);
+}
+function l1render(){
+  $('#l1pay').innerHTML = L1.payments.map(p => `<tr><td class="mono">${p.id}</td><td>${p.orderId}</td><td>${Number(p.amount).toLocaleString('vi-VN')}</td><td>${tag(p.status)}</td><td>${tag(p.tx)}</td></tr>`).join('') || '<tr><td colspan=5 class="legend">trống</td></tr>';
+  $('#l1idem').innerHTML = Object.values(L1.keys).map(k => `<tr><td class="mono">${k.kh}</td><td class="mono">${k.rh}</td><td>${k.state}</td><td class="mono">${k.paymentId}</td></tr>`).join('') || '<tr><td colspan=4 class="legend">trống</td></tr>';
+}
+$('#l1send').onclick = l1submit;
+$$('[data-p]').forEach(b => b.onclick = () => {
+  const p = b.dataset.p, set = (id, v) => $('#'+id).value = v;
+  if (p === 'conflict') set('l1amount', String(Number($('#l1amount').value || 0) + 1000));
+  if (p === 'newkey') set('l1key', 'key-' + Math.random().toString(36).slice(2, 12));
+  if (p === 'lowamt') set('l1amount', '4999');
+  if (p === 'decimal') set('l1amount', '10000.5');
+  if (p === 'badkey') set('l1key', 'abc');
+  if (p === 'momo') set('l1method', 'MOMO');
+  l1submit();
+});
+function l1setStatus(st){
+  const p = [...L1.payments].reverse().find(x => x.orderId === Number($('#l1order').value));
+  if (!p) { $('#l1out').className = 'note warn'; $('#l1out').textContent = 'Order này chưa có payment.'; return; }
+  p.status = st; p.tx = st === 'COMPLETED' ? 'SUCCESS' : st; l1render();
+  $('#l1out').className = 'note'; $('#l1out').innerHTML = `Payment ${p.id} → ${st}. Thử “Key mới, cùng order” để xem order còn active hay không.`;
+}
+$('#l1finish').onclick = () => l1setStatus('COMPLETED');
+$('#l1review').onclick = () => l1setStatus('REVIEW_REQUIRED');
+$('#l1clear').onclick = () => { L1.payments = []; L1.keys = {}; $('#l1out').className = 'note'; $('#l1out').textContent = 'Đã xoá.'; l1render(); };
+l1render();
+
+/* ===================== 4. Lab 2 – chữ ký ===================== */
+const L2DEF = {
+  vnp_Version:'2.1.0', vnp_Command:'pay', vnp_TmnCode:'DEMOTMN1', vnp_Amount:'15000000', vnp_CurrCode:'VND',
+  vnp_TxnRef:'7351234567890123', vnp_OrderInfo:'Thanh toan don hang 1001', vnp_OrderType:'other',
+  vnp_ReturnUrl:'https://example.test/webhook/vnpay/return', vnp_IpAddr:'203.0.113.7',
+  vnp_CreateDate:'20261010093000', vnp_ExpireDate:'20261010094500', vnp_Locale:'vn'
+};
+let l2signed = null;
+const javaEnc = v => encodeURIComponent(v).replace(/%20/g,'+').replace(/[!'()~]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+function l2params(){ const o = {}; $$('#l2fields input').forEach(i => o[i.dataset.k] = i.value); return o; }
+function canonical(o){
+  return Object.keys(o).sort().filter(k => o[k] != null && o[k].trim() !== '').map(k => javaEnc(k) + '=' + javaEnc(o[k])).join('&');
+}
+async function hmac512(secret, msg){
+  if (!(globalThis.crypto && crypto.subtle)) return hex(PureHash.hmac512(enc(secret), enc(msg)));
+  const k = await crypto.subtle.importKey('raw', enc(secret), {name:'HMAC', hash:'SHA-512'}, false, ['sign']);
+  return hex(new Uint8Array(await crypto.subtle.sign('HMAC', k, enc(msg))));
+}
+$('#l2fields').innerHTML = Object.entries(L2DEF).map(([k,v]) => `<div><label>${k}</label><input data-k="${k}" value="${esc(v)}" class="mono"></div>`).join('');
+async function l2update(){
+  const c = canonical(l2params()), sig = await hmac512($('#l2secret').value, c);
+  $('#l2canon span').textContent = c; $('#l2sig span').textContent = sig;
+  if (l2signed) $('#l2status').innerHTML = sig === l2signed.sig ? '<span class="tag t-ok">✔ Khớp chữ ký đã ký – verify sẽ PASS</span>' : '<span class="tag t-bad">✘ Lệch chữ ký đã ký – verify FAIL (RspCode 97)</span>';
+  else $('#l2status').innerHTML = '<span class="tag t-none">chưa ký</span>';
+}
+$$('#l2fields input, #l2secret').forEach(i => i.oninput = l2update);
+$('#l2sign').onclick = async () => {
+  const c = canonical(l2params()), sig = await hmac512($('#l2secret').value, c);
+  l2signed = {sig, c}; $('#l2signed').firstElementChild.textContent = sig; l2update();
+};
+$('#l2tamper').onclick = async () => {
+  const a = $('#l2fields input[data-k=vnp_Amount]');
+  if (!l2signed) await $('#l2sign').onclick();
+  a.value = '100000'; await l2update();
+};
+$('#l2reset').onclick = () => { $$('#l2fields input').forEach(i => i.value = L2DEF[i.dataset.k]); l2update(); };
+l2update();
+
+/* ===================== 5. Lab 3 – IPN ===================== */
+const RC = [['00','Thành công'],['07','Trừ tiền, nghi ngờ gian lận'],['09','Thẻ chưa đăng ký Internet Banking'],['10','Xác thực sai quá 3 lần'],['11','Hết hạn chờ thanh toán'],['12','Thẻ/TK bị khoá'],['13','Sai mật khẩu OTP'],['24','Khách huỷ giao dịch'],['51','Không đủ số dư'],['65','Vượt hạn mức ngày'],['75','Ngân hàng bảo trì'],['79','Sai mật khẩu thanh toán quá số lần'],['99','Lỗi khác'],['88','(mã lạ – không có trong bảng)']];
+const TSTAT = [['00','00 – thành công'],['01','01 – chưa hoàn tất'],['02','02 – lỗi'],['07','07 – nghi ngờ']];
+$('#i_rc').innerHTML = RC.map(([c,t]) => `<option value="${c}">${c} – ${t}</option>`).join('');
+$('#i_ts').innerHTML = TSTAT.map(([c,t]) => `<option value="${c}">${t}</option>`).join('');
+const DECLINED = new Set(['09','10','12','13','24','51','65','75','79','99']);
+function ipnDecide(i){
+  const T = []; // {ok:'pass'|'fail'|'stop'|'skip', t}
+  let rsp = null, msg = '', tr = null;
+  const step = (cond, name, failRsp, failMsg, failTxt) => {
+    if (rsp) { T.push({k:'skip', t:name}); return false; }
+    if (cond) { T.push({k:'pass', t:name}); return true; }
+    T.push({k:'stop', t:`${name} → ${failTxt}`}); rsp = failRsp; msg = failMsg; return false;
+  };
+  step(i.sig, 'Chữ ký HMAC hợp lệ (trước mọi truy vấn DB)', '97', 'Invalid signature', 'RspCode 97, chưa chạm DB');
+  step(i.full, 'Đủ tham số bắt buộc (TmnCode, Amount, TxnRef, ResponseCode, TransactionStatus, TransactionNo, SecureHash)', '99', 'Invalid request', 'RspCode 99');
+  step(i.tmn, 'vnp_TmnCode khớp cấu hình', '99', 'Invalid request', 'RspCode 99');
+  const refOk = /^-?\d{1,18}$/.test(i.ref), amtOk = /^[+-]?\d+$/.test(i.amt);
+  step(refOk && amtOk, 'vnp_TxnRef và vnp_Amount parse được thành số', '99', 'Invalid request', 'NumberFormatException → 99');
+  step(i.exist, 'Tìm thấy transaction (SELECT … FOR UPDATE) và payment', '01', 'Order not found', 'RspCode 01');
+  step(i.meth, 'method = VNPAY và currency = VND', '99', 'Invalid request', 'RspCode 99');
+  let expected = null; if (/^\d+$/.test(i.exp)) expected = BigInt(i.exp) * 100n;
+  step(expected !== null && amtOk && expected === BigInt(i.amt), `Số tiền khớp: đã lưu ×100 = ${expected===null?'?':expected} vs gửi về ${i.amt}`, '04', 'Invalid amount', 'RspCode 04');
+  step(i.tx === 'PENDING', `Transaction còn PENDING (hiện ${i.tx}; payment cũng phải còn PENDING)`, '02', 'Order already confirmed', 'RspCode 02, không đổi gì');
+  if (!rsp) {
+    const rc = i.rc, ts = i.ts;
+    const push = (k, t) => T.push({k, t});
+    if (rc === '00' && ts === '00') { push('pass','00 + 00 ⇒ thành công'); rsp='00'; msg='Confirm Success'; tr = ['COMPLETED','SUCCESS']; }
+    else if (rc === '07' && (ts === '00' || ts === '07')) { push('pass','07 + (00|07) ⇒ cần xem xét'); rsp='00'; msg='Confirm Success'; tr = ['REVIEW_REQUIRED','REVIEW_REQUIRED']; }
+    else if (rc === '00' || ts === '00') { push('stop','Chỉ MỘT trong hai là 00 (mâu thuẫn) ⇒ không đổi trạng thái, RspCode 99'); rsp='99'; msg='Invalid request'; }
+    else if (rc === '11') { push('pass','11 ⇒ hết hạn'); rsp='00'; msg='Confirm Success'; tr = ['EXPIRED','EXPIRED']; }
+    else if (DECLINED.has(rc)) { push('pass',`${rc} thuộc tập mã từ chối ⇒ FAILED`); rsp='00'; msg='Confirm Success'; tr = ['FAILED','FAILED']; }
+    else { push('stop',`Mã ${rc} không nhận diện ⇒ không đổi trạng thái, RspCode 99`); rsp='99'; msg='Invalid request'; }
+  }
+  return {T, rsp, msg, tr};
+}
+function ipnRead(){
+  return {rc:$('#i_rc').value, ts:$('#i_ts').value, ref:$('#i_ref').value.trim(), amt:$('#i_amt').value.trim(), exp:$('#i_exp').value.trim(),
+    tx:$('#i_tx').value, sig:$('#i_sig').checked, tmn:$('#i_tmn').checked, full:$('#i_full').checked, exist:$('#i_exist').checked, meth:$('#i_meth').checked};
+}
+function ipnRun(){
+  const r = ipnDecide(ipnRead());
+  $('#i_trace').innerHTML = r.T.map(x => `<li class="${x.k}"><span class="ic">${{pass:'✔',fail:'✘',stop:'■',skip:'·'}[x.k]}</span><span>${x.t}</span></li>`).join('');
+  $('#i_res').innerHTML = `HTTP <b>200</b> <code>{"RspCode":"${r.rsp}","Message":"${r.msg}"}</code>`;
+  $('#i_trans').innerHTML = r.tr
+    ? `<div class="note ok">Thay đổi: Payment ${tag('PENDING')} → ${tag(r.tr[0])} · Transaction ${tag('PENDING')} → ${tag(r.tr[1])}</div>`
+    : `<div class="note ${r.rsp==='02'?'warn':'bad'}">Không có thay đổi trạng thái nào. ${r.rsp==='00'?'':'Mã trả về chỉ để báo VNPay.'}</div>`;
+}
+$('#i_go').onclick = ipnRun;
+const IPNP = {
+  ok:{rc:'00',ts:'00'}, decl:{rc:'51',ts:'02'}, exp:{rc:'11',ts:'02'}, rev:{rc:'07',ts:'00'}, mix:{rc:'00',ts:'02'}, unk:{rc:'88',ts:'02'},
+  sig:{rc:'00',ts:'00',sig:false}, amt:{rc:'00',ts:'00',amt:'1500000'}, dup:{rc:'00',ts:'00',tx:'SUCCESS'}, nf:{rc:'00',ts:'00',exist:false}
+};
+$$('[data-ipn]').forEach(b => b.onclick = () => {
+  const p = {rc:'00',ts:'00',amt:'15000000',tx:'PENDING',sig:true,exist:true, ...IPNP[b.dataset.ipn]};
+  $('#i_rc').value = p.rc; $('#i_ts').value = p.ts; $('#i_amt').value = p.amt; $('#i_tx').value = p.tx;
+  $('#i_sig').checked = p.sig; $('#i_exist').checked = p.exist;
+  $('#i_tmn').checked = $('#i_full').checked = $('#i_meth').checked = true;
+  ipnRun();
+});
+ipnRun();
+
+/* ===================== 6. Lab 4 – đối soát ===================== */
+const R = {att:0, max:12, tx:'PENDING', pay:'PENDING', ex:false, log:[]};
+function rRender(){
+  $('#r_tx').className = 'tag ' + tagFor(R.tx); $('#r_tx').textContent = R.tx;
+  $('#r_pay').className = 'tag ' + tagFor(R.pay); $('#r_pay').textContent = R.pay;
+  $('#r_att').textContent = R.att; $('#r_prog').style.width = (R.att / R.max * 100) + '%';
+  $('#r_ex').innerHTML = R.ex ? '<span class="tag t-bad">reconciliation_exhausted = true → xử lý thủ công</span>' : '';
+  $('#r_log').innerHTML = R.log.map(l => `<li>${l}</li>`).join('');
+  const done = R.tx !== 'PENDING' || R.ex;
+  $$('[data-q], #r_auto').forEach(b => b.disabled = done);
+}
+function rQuery(d){
+  if (R.tx !== 'PENDING') { R.log.push('Bỏ qua: transaction đã terminal – không ghi đè.'); return rRender(); }
+  if (R.ex) return;
+  R.att++; R.ex = R.att >= R.max;
+  const t = `Lượt ${R.att}: QueryDR → ${d}`;
+  if (d === 'SUCCESS') { R.pay = 'COMPLETED'; R.tx = 'SUCCESS'; R.log.push(t + ' ⇒ markCompleted/markSuccess (UPDATED)'); R.ex = false; }
+  else if (d === 'FAILED') { R.pay = 'FAILED'; R.tx = 'FAILED'; R.log.push(t + ' ⇒ markFailed (UPDATED)'); R.ex = false; }
+  else if (d === 'REVIEW_REQUIRED') { R.pay = 'REVIEW_REQUIRED'; R.tx = 'REVIEW_REQUIRED'; R.log.push(t + ' ⇒ markReviewRequired (UPDATED)'); R.ex = false; }
+  else R.log.push(t + (R.ex ? ' ⇒ attempts = 12: EXHAUSTED, giữ PENDING, next_reconciliation_at = NULL' : ` ⇒ RETRY_SCHEDULED (+5 phút)`));
+  rRender();
+}
+$$('[data-q]').forEach(b => b.onclick = () => rQuery(b.dataset.q));
+$('#r_auto').onclick = () => { while (!R.ex && R.tx === 'PENDING') rQuery('PENDING'); };
+$('#r_reset').onclick = () => { Object.assign(R, {att:0, tx:'PENDING', pay:'PENDING', ex:false, log:[]}); rRender(); };
+rRender();
+
+/* ===================== 7. State machine ===================== */
+const PS = ['PENDING','REVIEW_REQUIRED','COMPLETED','FAILED','EXPIRED','REFUNDED','PARTIALLY_REFUNDED'];
+const TS = ['PENDING','REVIEW_REQUIRED','SUCCESS','FAILED','EXPIRED'];
+const S = {p:'PENDING', t:'PENDING'};
+const PACT = {
+  markCompleted: s => { if (s==='COMPLETED') return s; if (s!=='PENDING') throw `Cannot complete payment in status: ${s}`; return 'COMPLETED'; },
+  markFailed: s => { if (s==='FAILED') return s; if (s==='COMPLETED') throw 'Cannot fail an already completed payment'; return 'FAILED'; },
+  markExpired: s => { if (s!=='PENDING') throw `Cannot expire payment in status: ${s}`; return 'EXPIRED'; },
+  markReviewRequired: s => { if (s!=='PENDING') throw `Cannot review payment in status: ${s}`; return 'REVIEW_REQUIRED'; },
+  markRefunded: s => { if (s!=='COMPLETED' && s!=='PARTIALLY_REFUNDED') throw `Cannot refund payment in status: ${s}`; return 'REFUNDED'; },
+  markPartiallyRefunded: s => { if (s!=='COMPLETED' && s!=='PARTIALLY_REFUNDED') throw `Cannot partially refund payment in status: ${s}`; return 'PARTIALLY_REFUNDED'; }
+};
+const TACT = {
+  markSuccess: s => { if (s==='SUCCESS') return s; if (s!=='PENDING') throw `Cannot mark transaction as SUCCESS from status: ${s}`; return 'SUCCESS'; },
+  markFailed: s => { if (s==='FAILED') return s; if (s==='SUCCESS') throw 'Cannot mark as FAILED an already successful transaction'; return 'FAILED'; },
+  markExpired: s => { if (s==='SUCCESS') throw 'Cannot expire an already successful transaction'; return 'EXPIRED'; },
+  markReviewRequired: s => { if (s!=='PENDING') throw `Cannot review transaction in status: ${s}`; return 'REVIEW_REQUIRED'; }
+};
+function stRender(){
+  $('#pStates').innerHTML = PS.map(s => `<span class="st ${S.p===s?'cur':''}">${s}</span>`).join('');
+  $('#tStates').innerHTML = TS.map(s => `<span class="st ${S.t===s?'cur':''}">${s}</span>`).join('');
+}
+function mkBtns(id, acts, key, msgId){
+  $(id).innerHTML = Object.keys(acts).map(a => `<button class="sm" data-a="${a}">${a}()</button>`).join('');
+  $$(id + ' button').forEach(b => b.onclick = () => {
+    try { const before = S[key]; S[key] = acts[b.dataset.a](S[key]);
+      $(msgId).innerHTML = `<span class="tag t-ok">OK</span> ${before} → ${S[key]}${before===S[key]?' (idempotent, không đổi)':''}`;
+    } catch (e) { $(msgId).innerHTML = `<span class="tag t-bad">IllegalStateException</span> ${esc(e)}`; }
+    stRender();
+  });
+}
+mkBtns('#pBtns', PACT, 'p', '#pMsg'); mkBtns('#tBtns', TACT, 't', '#tMsg');
+$('#stReset').onclick = () => { S.p = S.t = 'PENDING'; $('#pMsg').innerHTML = $('#tMsg').innerHTML = ''; stRender(); };
+stRender();
+
+/* ===================== 8. Kiến thức ===================== */
+const KNOW = [
+ ['Tại sao cần Idempotency-Key?','Mạng có thể timeout sau khi server đã tạo payment. Nếu client retry mà không có khoá, bạn sinh ra 2 thanh toán cho một đơn. Module lưu <code>idempotency_key</code> (SHA-256 của key) cùng <code>request_hash</code> = SHA-256(orderId|amount|currency|method), hạn 24h:<ul><li>Cùng key + cùng hash ⇒ <b>replay</b>: trả lại kết quả cũ.</li><li>Cùng key + hash khác ⇒ <b>409 IDEMPOTENCY_CONFLICT</b>.</li><li>Đang xử lý ⇒ <b>409 IDEMPOTENCY_IN_PROGRESS</b> + Retry-After.</li></ul>Lưu ý: chỉ băm key, không lưu key gốc.'],
+ ['Advisory lock của PostgreSQL','<code>pg_try_advisory_xact_lock(hash)</code> là khoá ứng dụng do ta tự đặt tên, <b>không gắn với hàng</b> nào. “try” = không chờ vô hạn (2s rồi 409). “xact” = tự nhả khi transaction commit/rollback, nên không bao giờ “quên unlock”. Module lấy 2 khoá <b>theo thứ tự cố định</b> (key-hash rồi order-id) để tránh deadlock; khoá order-id ngăn hai key khác nhau cùng tạo payment cho một đơn.'],
+ ['SELECT … FOR UPDATE (findByIdForUpdate)','Khoá <b>hàng</b> transaction trong lúc xử lý IPN/đối soát. Nếu IPN và QueryDR (hoặc 2 IPN) đến cùng lúc, cái sau chờ cái trước commit rồi thấy transaction đã terminal ⇒ trả 02/ALREADY_TERMINAL thay vì ghi chồng.'],
+ ['IPN và Return URL khác nhau thế nào?','<table><tr><th></th><th>IPN</th><th>Return URL</th></tr><tr><td>Đường đi</td><td>VNPay → server bạn</td><td>VNPay → trình duyệt khách → server</td></tr><tr><td>Độ tin cậy</td><td>Cao (có retry, server-to-server)</td><td>Thấp (khách đóng tab, sửa URL)</td></tr><tr><td>Đổi trạng thái?</td><td><b>Có</b></td><td><b>Không bao giờ</b></td></tr></table>Mọi quyết định “đã trả tiền” phải dựa vào IPN hoặc QueryDR đã verify chữ ký.'],
+ ['HMAC-SHA512 và canonicalization','Chữ ký chứng minh nội dung không bị sửa và do người biết secret tạo ra. Hai bên phải dựng <b>cùng một chuỗi</b>: bỏ giá trị rỗng, sắp theo khoá, URL-encode kiểu Java (dấu cách → <code>+</code>), nối bằng <code>&amp;</code>. Sai khác một ký tự là chữ ký khác hoàn toàn. Thử ở Lab 2.'],
+ ['So sánh chữ ký hằng thời gian','Dùng <code>==</code> / <code>equals</code> thoát sớm tại ký tự đầu tiên khác nhau ⇒ kẻ tấn công đo thời gian để đoán dần từng ký tự (timing attack). <code>MessageDigest.isEqual</code> luôn duyệt đủ độ dài. Module còn từ chối ngay nếu chữ ký không phải 128 ký tự hex.'],
+ ['Vì sao verify chữ ký trước khi truy vấn DB?','Endpoint IPN là công khai. Nếu mỗi request giả đều gây truy vấn DB + khoá hàng thì kẻ xấu dễ gây tải hoặc dò <code>TxnRef</code> nào tồn tại (01 vs 97). Verify trước ⇒ request giả bị loại với chi phí tính HMAC.'],
+ ['Số tiền ×100 và kiểm tra số tiền','VNPay quy định <code>vnp_Amount</code> = số tiền × 100 (không có dấu thập phân; tối đa 12 chữ số). IPN phải so sánh với số tiền <b>đã lưu trong DB</b>, không tin con số trong request ngoài chữ ký. Sai ⇒ RspCode 04 và giữ nguyên trạng thái. VND chỉ nhận số nguyên ≥ 5000.'],
+ ['vnp_TxnRef = Transaction.id, không phải orderId','Một order có thể có nhiều lần thử thanh toán (lần trước FAILED/EXPIRED). VNPay yêu cầu mã tham chiếu duy nhất cho mỗi lần thử, nên dùng id của Transaction. ID là TSID (sinh ở ứng dụng) nên có sẵn trước khi INSERT trả về ⇒ dựng được URL ngay.'],
+ ['Điều kiện thành công kép (00 và 00)','<code>vnp_ResponseCode</code> cho biết kết quả xử lý yêu cầu, <code>vnp_TransactionStatus</code> cho biết trạng thái giao dịch. Chỉ khi <b>cả hai bằng 00</b> mới thành công. Nếu chỉ một trong hai là 00 ⇒ dữ liệu mâu thuẫn ⇒ RspCode 99, không đổi trạng thái (an toàn hơn là đoán).'],
+ ['Vì sao IPN luôn trả HTTP 200?','VNPay đọc <code>RspCode</code> trong body để biết cần retry hay không. HTTP 4xx/5xx khiến VNPay coi là lỗi mạng và gọi lại liên tục. Lỗi nghiệp vụ được thể hiện bằng RspCode (00/01/02/04/97/99), lỗi ngoài dự kiến (exception) cũng được bắt và trả 99.'],
+ ['Múi giờ &amp; định dạng thời gian','<code>vnp_CreateDate</code> / <code>vnp_ExpireDate</code> định dạng <code>yyyyMMddHHmmss</code> theo múi giờ <b>Asia/Ho_Chi_Minh</b> (không phải UTC). Thời hạn mặc định <code>expiryMinutes = 15</code>. Dùng <code>Clock</code> được tiêm vào để test với thời gian cố định.'],
+ ['Đối soát (reconciliation) &amp; “exhausted”','IPN có thể mất. Scheduler chạy mỗi 5 phút (delay đầu 30s), tìm charge PENDING đã quá hạn, gọi QueryDR, tối đa 12 lần. Kết thúc 12 lần vẫn không rõ ⇒ <code>reconciliation_exhausted = true</code>, payment <b>giữ PENDING</b> để con người xử lý – tuyệt đối không tự đoán “thất bại” vì tiền có thể đã bị trừ. Không bao giờ ghi đè transaction đã terminal. Thử ở Lab 4.'],
+ ['Máy trạng thái nằm trong domain','Luật chuyển trạng thái nằm ở <code>Payment</code>/<code>Transaction</code> (ném <code>IllegalStateException</code> khi sai), không nằm rải rác trong service. Service chỉ ra lệnh <code>markCompleted()</code>…; domain quyết định có hợp lệ không. Nhờ vậy dễ viết unit test thuần.'],
+ ['Bảo mật log &amp; cấu hình','Không bao giờ log: hash secret, chữ ký, checkout URL đầy đủ. Log chỉ chứa <code>txnRef</code>, mã và loại exception. Secret chỉ lấy từ biến môi trường (<code>VNPAY_TMN_CODE</code>, <code>VNPAY_HASH_SECRET</code>, <code>SPRING_DATASOURCE_*</code>); <code>.env</code> không commit. Service không bao giờ xử lý PAN/CVV (hosted checkout).'],
+ ['Flyway sở hữu schema','Thay đổi DB = file mới <code>db/migration/V{n}__*.sql</code>, không sửa migration đã áp dụng. Hibernate để <code>ddl-auto: validate</code> ở mọi profile: thêm field entity mà quên migration ⇒ ứng dụng không khởi động. Trên Spring Boot 4 cần <code>spring-boot-starter-flyway</code>.'],
+ ['Hạn chế đã biết (đừng quên)','<ul><li><code>createPayment</code> gọi provider <i>bên trong</i> DB transaction đang giữ advisory lock. Ổn với VNPay (ký cục bộ) nhưng với MoMo (gọi mạng) phải tách ra ngoài.</li><li>Đường cũ <code>verifyWebhook → processTransaction</code> (MoMo/bank) <b>không kiểm số tiền</b>; hiện không với tới được vì provider bị tắt – hãy viết processor riêng thay vì mở rộng.</li><li>Refund chưa triển khai; Redis/RabbitMQ đã cấu hình nhưng chưa dùng.</li></ul>'],
+ ['Checklist khi tự thêm provider mới','1) Verify chữ ký trước DB. 2) Khoá hàng transaction. 3) Kiểm số tiền/tiền tệ với dữ liệu đã lưu. 4) Chỉ xử lý khi còn PENDING (idempotent). 5) Mã lạ ⇒ không đổi trạng thái. 6) Có đối soát cho trường hợp mất callback. 7) Không log bí mật. 8) Test: sai chữ ký, sai số tiền, IPN trùng, đua đồng thời.']
+];
+$('#know').innerHTML = KNOW.map(([t, b], i) => `<details data-i="${i}"><summary>${t}</summary><div class="body">${b}</div></details>`).join('');
+$('#kOpen').onclick = () => $$('#know details:not(.hide)').forEach(d => d.open = true);
+$('#kClose').onclick = () => $$('#know details').forEach(d => d.open = false);
+$('#kSearch').oninput = e => {
+  const q = e.target.value.trim().toLowerCase();
+  $$('#know details').forEach(d => {
+    const hit = !q || d.textContent.toLowerCase().includes(q);
+    d.classList.toggle('hide', !hit); if (q && hit) d.open = true;
+  });
+};
+
+/* ===================== 9. Bảng mã ===================== */
+const CODES = [
+ ['IPN','00','ok','Confirm Success – đã ghi nhận (mới, hoặc là kết quả đã xử lý xong).'],
+ ['IPN','01','warn','Order not found – không có transaction với vnp_TxnRef.'],
+ ['IPN','02','warn','Order already confirmed – transaction đã terminal (IPN trùng, hoặc đã REVIEW_REQUIRED).'],
+ ['IPN','04','bad','Invalid amount – vnp_Amount ≠ số tiền đã lưu × 100.'],
+ ['IPN','97','bad','Invalid signature – HMAC không khớp, loại trước khi chạm DB.'],
+ ['IPN','99','bad','Invalid request – thiếu tham số, TmnCode sai, method/currency sai, mã không nhận diện, 00/xx mâu thuẫn, hoặc lỗi nội bộ.'],
+ ['Response','00','ok','Giao dịch thành công (phải kèm TransactionStatus=00).'],
+ ['Response','07','warn','Trừ tiền thành công nhưng bị nghi ngờ (gian lận/bất thường) ⇒ REVIEW_REQUIRED.'],
+ ['Response','11','warn','Hết thời gian chờ thanh toán ⇒ EXPIRED.'],
+ ['Response','09','bad','Thẻ/TK chưa đăng ký dịch vụ Internet Banking ⇒ FAILED.'],
+ ['Response','10','bad','Xác thực thông tin sai quá 3 lần ⇒ FAILED.'],
+ ['Response','12','bad','Thẻ/TK bị khoá ⇒ FAILED.'],
+ ['Response','13','bad','Nhập sai mật khẩu xác thực (OTP) ⇒ FAILED.'],
+ ['Response','24','bad','Khách hàng huỷ giao dịch ⇒ FAILED.'],
+ ['Response','51','bad','Tài khoản không đủ số dư ⇒ FAILED.'],
+ ['Response','65','bad','Vượt hạn mức giao dịch trong ngày ⇒ FAILED.'],
+ ['Response','75','bad','Ngân hàng thanh toán đang bảo trì ⇒ FAILED.'],
+ ['Response','79','bad','Sai mật khẩu thanh toán quá số lần quy định ⇒ FAILED.'],
+ ['Response','99','bad','Lỗi khác ⇒ FAILED (khi TransactionStatus ≠ 00).'],
+ ['Response','khác','none','Mã không có trong danh sách ⇒ RspCode 99, <b>không đổi trạng thái</b> (chờ IPN/QueryDR sau).'],
+ ['HTTP','409','warn','IDEMPOTENCY_CONFLICT / IDEMPOTENCY_IN_PROGRESS / PAYMENT_IN_PROGRESS / PAYMENT_ALREADY_PENDING.'],
+ ['HTTP','400','bad','INVALID_ORDER_ID / INVALID_PAYMENT_REQUEST / INVALID_AMOUNT / INVALID_IDEMPOTENCY_KEY / INVALID_CLIENT_IP / PAYMENT_METHOD_NOT_SUPPORTED.']
+];
+let cf = 'all';
+function codesRender(){
+  const kinds = ['all','IPN','Response','HTTP'];
+  $('#codeFilter').innerHTML = kinds.map(k => `<button class="chip ${cf===k?'on':''}" data-k="${k}">${k==='all'?'Tất cả':k==='IPN'?'RspCode (IPN)':k==='Response'?'vnp_ResponseCode':'Lỗi HTTP API'}</button>`).join('');
+  $$('#codeFilter .chip').forEach(b => b.onclick = () => { cf = b.dataset.k; codesRender(); });
+  $('#codeBody').innerHTML = CODES.filter(c => cf==='all' || c[0]===cf).map(c => `<tr><td><code>${c[1]}</code></td><td><span class="tag t-${c[2]}">${c[0]}</span></td><td>${c[3]}</td></tr>`).join('');
+}
+codesRender();
+
+/* ===================== 10. Quiz ===================== */
+const QUIZ = [
+ {q:'IPN đến với ResponseCode=00 nhưng TransactionStatus=02. Module làm gì?',o:['Đánh dấu thành công','Đánh dấu thất bại','Trả RspCode 99, không đổi trạng thái','Trả RspCode 04'],a:2,e:'Chỉ khi cả hai đều 00 mới thành công; chỉ một trong hai là 00 là dữ liệu mâu thuẫn ⇒ 99 và không đổi trạng thái.'},
+ {q:'vnp_TxnRef trong URL thanh toán là gì?',o:['orderId của merchant','Transaction.id','Payment.id','Idempotency-Key'],a:1,e:'Mỗi lần thử thanh toán cần mã duy nhất ⇒ Transaction.id (TSID).'},
+ {q:'Return URL (khách quay về trang merchant) có được đổi trạng thái payment không?',o:['Có, vì nhanh nhất','Có nếu chữ ký đúng','Không bao giờ – chỉ để hiển thị','Chỉ khi IPN chưa đến'],a:2,e:'Return URL đi qua trình duyệt khách nên không đáng tin; chỉ IPN/QueryDR đã verify mới đổi trạng thái.'},
+ {q:'Cùng Idempotency-Key nhưng amount khác. Kết quả?',o:['201 tạo payment mới','201 trả payment cũ','409 IDEMPOTENCY_CONFLICT','400 INVALID_AMOUNT'],a:2,e:'request_hash khác với hash đã lưu ⇒ 409 IDEMPOTENCY_CONFLICT.'},
+ {q:'Tại sao verify chữ ký IPN trước khi truy vấn DB?',o:['Vì DB chậm','Để request giả bị loại rẻ, không gây tải/lộ thông tin','Vì VNPay yêu cầu','Để tiết kiệm log'],a:1,e:'Endpoint công khai; HMAC rẻ hơn nhiều so với truy vấn + khoá hàng và không để lộ TxnRef nào tồn tại.'},
+ {q:'IPN lần 2 (trùng) đến sau khi payment đã COMPLETED. RspCode trả về?',o:['00 và ghi lại lần nữa','01','02','97'],a:2,e:'Transaction đã terminal ⇒ 02 “Order already confirmed”, không UPDATE.'},
+ {q:'Sau 12 lần QueryDR vẫn không biết kết quả, payment ở trạng thái nào?',o:['FAILED','EXPIRED','PENDING (reconciliation_exhausted=true)','COMPLETED'],a:2,e:'Không tự đoán vì tiền có thể đã bị trừ; giữ PENDING và đánh dấu exhausted để xử lý thủ công.'},
+ {q:'Số tiền 150000 VND được gửi trong vnp_Amount là?',o:['150000','1500','15000000','150000.00'],a:2,e:'VNPay quy định nhân 100, không có dấu thập phân.'},
+ {q:'Khi nào nên so sánh chữ ký bằng MessageDigest.isEqual thay vì equals?',o:['Luôn luôn khi so chuỗi','Khi so bí mật/chữ ký để tránh timing attack','Khi chuỗi dài hơn 100 ký tự','Không bao giờ'],a:1,e:'equals thoát sớm theo vị trí khác biệt đầu tiên ⇒ rò rỉ thời gian. isEqual chạy hằng thời gian.'}
+];
+let qAns = {};
+function quizRender(){
+  $('#quiz').innerHTML = QUIZ.map((q, i) => `<div class="q"><b>${i+1}. ${q.q}</b>${q.o.map((o, j) => {
+    const picked = qAns[i] !== undefined, cls = picked ? (j === q.a ? 'right' : (qAns[i] === j ? 'wrong' : '')) : '';
+    return `<button class="opt ${cls}" data-q="${i}" data-o="${j}" ${picked?'disabled':''}>${String.fromCharCode(65+j)}. ${o}</button>`;
+  }).join('')}${qAns[i] !== undefined ? `<div class="note ${qAns[i]===q.a?'ok':'bad'}">${qAns[i]===q.a?'Đúng! ':'Chưa đúng. '}${q.e}</div>` : ''}</div>`).join('');
+  $$('#quiz .opt').forEach(b => b.onclick = () => { qAns[b.dataset.q] = +b.dataset.o; quizRender(); });
+  const n = Object.keys(qAns).length, ok = QUIZ.filter((q, i) => qAns[i] === q.a).length;
+  $('#qScore').textContent = n ? `Điểm: ${ok}/${QUIZ.length} (đã trả lời ${n})` : '';
+}
+$('#qReset').onclick = () => { qAns = {}; quizRender(); };
+quizRender();
+</script>
+</body>
+</html>

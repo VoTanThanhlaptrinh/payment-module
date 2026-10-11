@@ -1,0 +1,40 @@
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify OpenAPI
+        env:
+          REDOCLY_TELEMETRY: off
+          REDOCLY_SUPPRESS_UPDATE_NOTICE: 'true'
+        run: npx --yes @redocly/cli@2.53.3 lint src/main/resources/static/openapi/payment-api.yaml
+      - name: Run tests
+        run: ./mvnw --batch-mode clean verify
+      - name: Check whitespace
+        run: git diff --check
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
