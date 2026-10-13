@@ -3,8 +3,8 @@ package com.thanh.payment.presentation.controller;
 import com.thanh.payment.application.dto.webhook.BankWebhookRequest;
 import com.thanh.payment.application.dto.webhook.MomoIpnRequest;
 import com.thanh.payment.application.dto.webhook.VnpayIpnResponse;
-import com.thanh.payment.application.port.in.ProcessVnpayIpnUseCase;
-import com.thanh.payment.application.port.in.VerifyWebhookUseCase;
+import com.thanh.payment.application.service.PaymentService;
+import com.thanh.payment.application.service.VnpayIpnService;
 import com.thanh.payment.domain.model.PaymentMethodType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -22,8 +22,8 @@ import org.springframework.util.MultiValueMap;
 @RequiredArgsConstructor
 public class WebhookController {
 
-    private final VerifyWebhookUseCase verifyWebhookUseCase;
-    private final ProcessVnpayIpnUseCase processVnpayIpnUseCase;
+    private final PaymentService paymentService;
+    private final VnpayIpnService vnpayIpnService;
 
     /**
      * IPN của VNPay: VNPay gọi GET kèm các tham số vnp_* và vnp_SecureHash.
@@ -32,7 +32,7 @@ public class WebhookController {
      */
     @GetMapping("/vnpay")
     public ResponseEntity<VnpayIpnResponse> vnpayIpn(@RequestParam MultiValueMap<String, String> parameters) {
-        return ResponseEntity.ok(processVnpayIpnUseCase.process(parameters));
+        return ResponseEntity.ok(vnpayIpnService.process(parameters));
     }
 
     // Return URL: nơi trình duyệt khách được VNPay đưa về. KHÔNG đọc tham số, KHÔNG đổi trạng thái payment: dữ liệu đi qua trình duyệt nên không đáng tin. Trạng thái chỉ do IPN/QueryDR quyết định.
@@ -45,13 +45,13 @@ public class WebhookController {
     // MoMo/ngân hàng: đường cũ (verifyWebhook -> processTransaction), chưa kiểm tra số tiền và hiện không với tới được vì provider đang bị tắt. Cần viết processor riêng trước khi bật.
     @PostMapping("/momo")
     public ResponseEntity<Void> momoIpn(@RequestBody MomoIpnRequest request) {
-        verifyWebhookUseCase.verifyWebhook(PaymentMethodType.MOMO, request);
+        paymentService.verifyWebhook(PaymentMethodType.MOMO, request);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/bank")
     public ResponseEntity<String> bankWebhook(@RequestBody BankWebhookRequest request) {
-        verifyWebhookUseCase.verifyWebhook(PaymentMethodType.BANK_TRANSFER, request);
+        paymentService.verifyWebhook(PaymentMethodType.BANK_TRANSFER, request);
         return ResponseEntity.ok("success");
     }
 }

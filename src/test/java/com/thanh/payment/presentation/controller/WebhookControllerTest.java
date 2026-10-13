@@ -2,8 +2,8 @@ package com.thanh.payment.presentation.controller;
 
 import com.thanh.payment.application.dto.webhook.VnpayIpnResponse;
 import com.thanh.payment.application.exception.ApiException;
-import com.thanh.payment.application.port.in.ProcessVnpayIpnUseCase;
-import com.thanh.payment.application.port.in.VerifyWebhookUseCase;
+import com.thanh.payment.application.service.PaymentService;
+import com.thanh.payment.application.service.VnpayIpnService;
 import com.thanh.payment.domain.model.PaymentMethodType;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,12 +28,12 @@ class WebhookControllerTest {
     private static final String IPN_PATH = "/api/v1/payments/webhook/vnpay";
 
     @Autowired MockMvc mockMvc;
-    @MockitoBean ProcessVnpayIpnUseCase processVnpayIpnUseCase;
-    @MockitoBean VerifyWebhookUseCase verifyWebhookUseCase;
+    @MockitoBean VnpayIpnService vnpayIpnService;
+    @MockitoBean PaymentService paymentService;
 
     @Test
     void shouldReturnVnpayAcknowledgementAsJsonWithHttp200() throws Exception {
-        when(processVnpayIpnUseCase.process(any())).thenReturn(VnpayIpnResponse.invalidSignature());
+        when(vnpayIpnService.process(any())).thenReturn(VnpayIpnResponse.invalidSignature());
 
         mockMvc.perform(get(IPN_PATH)
                         .queryParam("vnp_SecureHash", "bad"))
@@ -62,12 +62,12 @@ class WebhookControllerTest {
                 .andExpect(content().string(
                         "VNPay return received. Payment confirmation is pending the server-to-server IPN."));
 
-        verifyNoInteractions(processVnpayIpnUseCase);
+        verifyNoInteractions(vnpayIpnService);
     }
 
     @Test
     void disabledProviderWebhookMustAnswerNotFoundEnvelope() throws Exception {
-        when(verifyWebhookUseCase.verifyWebhook(eq(PaymentMethodType.MOMO), any()))
+        when(paymentService.verifyWebhook(eq(PaymentMethodType.MOMO), any()))
                 .thenThrow(new ApiException(HttpStatus.NOT_FOUND, "PROVIDER_DISABLED", "disabled"));
 
         mockMvc.perform(post("/api/v1/payments/webhook/momo")
@@ -79,7 +79,7 @@ class WebhookControllerTest {
 
     @Test
     void invalidWebhookSignatureMustAnswerUnauthorizedEnvelope() throws Exception {
-        when(verifyWebhookUseCase.verifyWebhook(eq(PaymentMethodType.BANK_TRANSFER), any()))
+        when(paymentService.verifyWebhook(eq(PaymentMethodType.BANK_TRANSFER), any()))
                 .thenThrow(new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_SIGNATURE", "bad signature"));
 
         mockMvc.perform(post("/api/v1/payments/webhook/bank")
@@ -99,7 +99,7 @@ class WebhookControllerTest {
     }
 
     private void assertIpn(VnpayIpnResponse response, String rspCode) throws Exception {
-        when(processVnpayIpnUseCase.process(any())).thenReturn(response);
+        when(vnpayIpnService.process(any())).thenReturn(response);
         mockMvc.perform(get(IPN_PATH).queryParam("vnp_TxnRef", "12345"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.RspCode").value(rspCode))

@@ -1,7 +1,7 @@
 package com.thanh.payment.presentation.controller;
 
 import com.thanh.payment.application.dto.PaymentResponse;
-import com.thanh.payment.application.port.in.CreatePaymentUseCase;
+import com.thanh.payment.application.service.PaymentService;
 import com.thanh.payment.domain.model.PaymentMethodType;
 import com.thanh.payment.domain.model.PaymentStatus;
 import com.thanh.payment.domain.valueobject.Currency;
@@ -21,7 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PaymentControllerTest {
 
     @Autowired MockMvc mockMvc;
-    @MockitoBean CreatePaymentUseCase createPaymentUseCase;
+    @MockitoBean PaymentService paymentService;
 
     @Test
     void shouldRequireIdempotencyKey() throws Exception {
@@ -34,7 +34,7 @@ class PaymentControllerTest {
 
     @Test
     void shouldReturnBackwardCompatiblePaymentIdentifiers() throws Exception {
-        when(createPaymentUseCase.createPayment(any())).thenReturn(PaymentResponse.builder()
+        when(paymentService.createPayment(any())).thenReturn(PaymentResponse.builder()
                 .id(10L).paymentId(10L).orderId(1L).totalAmount(java.math.BigDecimal.valueOf(5000))
                 .currency(Currency.VND).method(PaymentMethodType.VNPAY).status(PaymentStatus.PENDING)
                 .transactionId("20").checkoutUrl("https://sandbox.vnpayment.vn/signed").build());

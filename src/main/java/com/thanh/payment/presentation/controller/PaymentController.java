@@ -1,7 +1,7 @@
 package com.thanh.payment.presentation.controller;
 
 import com.thanh.payment.application.dto.PaymentResponse;
-import com.thanh.payment.application.port.in.CreatePaymentUseCase;
+import com.thanh.payment.application.service.PaymentService;
 import com.thanh.payment.presentation.dto.CreatePaymentRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +27,7 @@ import jakarta.servlet.http.HttpServletRequest;
 @RequiredArgsConstructor
 public class PaymentController {
 
-    private final CreatePaymentUseCase createPaymentUseCase;
+    private final PaymentService paymentService;
 
     /**
      * Tạo thanh toán mới.
@@ -41,7 +41,7 @@ public class PaymentController {
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody CreatePaymentRequest request,
             HttpServletRequest servletRequest) {
-        PaymentResponse response = createPaymentUseCase.createPayment(
+        PaymentResponse response = paymentService.createPayment(
                 request.toCommand(idempotencyKey, servletRequest.getRemoteAddr()));
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }

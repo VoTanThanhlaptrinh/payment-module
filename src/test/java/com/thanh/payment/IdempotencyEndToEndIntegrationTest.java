@@ -3,7 +3,7 @@ package com.thanh.payment;
 import com.thanh.payment.application.command.CreatePaymentCommand;
 import com.thanh.payment.application.dto.PaymentResponse;
 import com.thanh.payment.application.exception.ApiException;
-import com.thanh.payment.application.port.in.CreatePaymentUseCase;
+import com.thanh.payment.application.service.PaymentService;
 import com.thanh.payment.domain.model.PaymentMethodType;
 import com.thanh.payment.domain.valueobject.Currency;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ActiveProfiles("test")
 class IdempotencyEndToEndIntegrationTest {
 
-    @Autowired CreatePaymentUseCase createPayment;
+    @Autowired PaymentService createPayment;
     @Autowired JdbcTemplate jdbcTemplate;
     @Autowired StringRedisTemplate redis;
 

@@ -6,10 +6,6 @@ import com.thanh.payment.application.command.RefundCommand;
 import com.thanh.payment.application.dto.PaymentResponse;
 import com.thanh.payment.application.dto.PaymentVerificationResult;
 import com.thanh.payment.application.exception.ApiException;
-import com.thanh.payment.application.port.in.CreatePaymentUseCase;
-import com.thanh.payment.application.port.in.ProcessTransactionUseCase;
-import com.thanh.payment.application.port.in.RefundUseCase;
-import com.thanh.payment.application.port.in.VerifyWebhookUseCase;
 import com.thanh.payment.application.port.out.PaymentProvider;
 import com.thanh.payment.application.port.out.WebhookVerifier;
 import com.thanh.payment.domain.model.Payment;
@@ -45,8 +41,7 @@ import java.util.Optional;
  */
 @Service
 @RequiredArgsConstructor
-public class PaymentService
-        implements CreatePaymentUseCase, ProcessTransactionUseCase, RefundUseCase, VerifyWebhookUseCase {
+public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final TransactionRepository transactionRepository;
@@ -67,7 +62,6 @@ public class PaymentService
      *      Chống trùng ở DB nhờ unique: vi phạm thì replay hoặc báo order đang có payment active.
      *   4. Thành công thì đánh dấu key COMPLETED (24h); thoát bằng exception thì try-with-resources nhả key.
      */
-    @Override
     public PaymentResponse createPayment(CreatePaymentCommand command) {
         // Bước 1: kiểm tra đầu vào (độc lập với Bean Validation ở controller) rồi chọn provider đang bật.
         validateCreateCommand(command);
@@ -172,7 +166,6 @@ public class PaymentService
 
     // Đường xử lý callback CŨ cho MoMo/bank: đánh dấu Payment/Transaction theo kết quả đã verify.
     // KHÔNG kiểm tra số tiền và không khoá hàng, nên không dùng cho VNPay (đã có VnpayIpnProcessor).
-    @Override
     @Transactional
     public void processTransaction(ProcessTransactionCommand command) {
         Transaction transaction = findTransaction(command);
@@ -214,7 +207,6 @@ public class PaymentService
 
     // Đường cũ: verify chữ ký bằng WebhookVerifier của provider rồi gọi processTransaction.
     // Hiện không với tới được vì MoMo/bank chưa bật; cần thay bằng processor riêng như VnpayIpnProcessor trước khi bật.
-    @Override
     @Transactional
     public PaymentVerificationResult verifyWebhook(PaymentMethodType type, Object payload) {
         // Provider chưa bật thì không có endpoint này: 404 thay vì lỗi chung.
@@ -236,7 +228,6 @@ public class PaymentService
         return result;
     }
 
-    @Override
     public void refund(RefundCommand command) {
         // Refund is intentionally outside the VNPay P0 slice.
     }

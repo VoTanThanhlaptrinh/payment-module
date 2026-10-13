@@ -4,7 +4,6 @@ import com.thanh.payment.adapter.out.provider.VnpayIpnVerifier;
 import com.thanh.payment.adapter.out.provider.config.VnpayProperties;
 import com.thanh.payment.application.dto.webhook.VnpayIpnData;
 import com.thanh.payment.application.dto.webhook.VnpayIpnResponse;
-import com.thanh.payment.application.port.in.ProcessVnpayIpnUseCase;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,14 +24,13 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class VnpayIpnService implements ProcessVnpayIpnUseCase {
+public class VnpayIpnService {
 
     private final VnpayIpnVerifier verifier;
     private final VnpayProperties properties;
     private final VnpayIpnProcessor processor;
 
-    // Điểm vào của use case ProcessVnpayIpnUseCase; rawParameters là nguyên văn query string VNPay gửi tới.
-    @Override
+    // Điểm vào xử lý IPN; rawParameters là nguyên văn query string VNPay gửi tới.
     public VnpayIpnResponse process(Map<String, List<String>> rawParameters) {
         // Provider tắt thì không nhận IPN: trả 99, không đụng gì.
         if (!properties.isEnabled()) {
