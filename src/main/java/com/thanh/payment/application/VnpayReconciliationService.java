@@ -1,7 +1,7 @@
 package com.thanh.payment.application;
 
 import com.thanh.payment.application.provider.VnpayQueryResult;
-import com.thanh.payment.application.provider.VnpayTransactionQuery;
+import com.thanh.payment.infrastructure.provider.vnpay.VnpayQueryDrClient;
 import com.thanh.payment.domain.model.Transaction;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +21,7 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class VnpayReconciliationService {
 
-    private final VnpayTransactionQuery transactionQuery;
+    private final VnpayQueryDrClient transactionQuery;
     private final VnpayReconciliationProcessor processor;
 
     // Điểm vào cho scheduler. Lỗi mạng/timeout không được làm hỏng cả lô: đổi thành kết quả RETRY để lần sau thử lại.

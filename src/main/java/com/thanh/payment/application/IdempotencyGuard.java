@@ -1,11 +1,12 @@
 package com.thanh.payment.application;
 
+import com.thanh.payment.infrastructure.cache.RedisIdempotencyStore;
 import com.thanh.payment.shared.exception.ApiException;
-import com.thanh.payment.application.IdempotencyStore.Existing;
-import com.thanh.payment.application.IdempotencyStore.IdempotencyStoreUnavailableException;
-import com.thanh.payment.application.IdempotencyStore.Reservation;
-import com.thanh.payment.application.IdempotencyStore.Reserved;
-import com.thanh.payment.application.IdempotencyStore.State;
+import com.thanh.payment.infrastructure.cache.RedisIdempotencyStore.Existing;
+import com.thanh.payment.infrastructure.cache.RedisIdempotencyStore.IdempotencyStoreUnavailableException;
+import com.thanh.payment.infrastructure.cache.RedisIdempotencyStore.Reservation;
+import com.thanh.payment.infrastructure.cache.RedisIdempotencyStore.Reserved;
+import com.thanh.payment.infrastructure.cache.RedisIdempotencyStore.State;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -22,7 +23,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class IdempotencyGuard {
 
-    private final IdempotencyStore store;
+    private final RedisIdempotencyStore store;
 
     public sealed interface Acquisition permits Acquired, AlreadyCompleted {
     }

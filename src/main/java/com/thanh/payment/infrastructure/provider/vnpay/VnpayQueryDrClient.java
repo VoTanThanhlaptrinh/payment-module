@@ -2,7 +2,6 @@ package com.thanh.payment.infrastructure.provider.vnpay;
 
 import com.thanh.payment.application.provider.VnpayQueryDecision;
 import com.thanh.payment.application.provider.VnpayQueryResult;
-import com.thanh.payment.application.provider.VnpayTransactionQuery;
 import com.thanh.payment.domain.model.Transaction;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
@@ -26,7 +25,7 @@ import java.util.UUID;
  */
 @Component
 @ConditionalOnProperty(prefix = "payment.providers.vnpay", name = "reconciliation-enabled", havingValue = "true")
-public class VnpayQueryDrClient implements VnpayTransactionQuery {
+public class VnpayQueryDrClient {
 
     private static final ZoneId VNPAY_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final DateTimeFormatter VNPAY_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
@@ -56,7 +55,6 @@ public class VnpayQueryDrClient implements VnpayTransactionQuery {
 
     // Gọi VNPay: dựng request ký sẵn -> POST JSON -> đọc response -> validateAndMap.
     // Ném RuntimeException khi lỗi mạng/timeout/HTTP 5xx; VnpayReconciliationService bắt và coi là lần thử lỗi (TRANSPORT_ERROR).
-    @Override
     public VnpayQueryResult query(Transaction transaction) {
         OffsetDateTime now = OffsetDateTime.now(clock);
         // vnp_TxnRef = Transaction.id, đúng mã đã gửi lúc tạo URL thanh toán.

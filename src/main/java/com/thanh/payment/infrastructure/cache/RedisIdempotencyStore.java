@@ -1,6 +1,5 @@
 package com.thanh.payment.infrastructure.cache;
 
-import com.thanh.payment.application.IdempotencyStore;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -14,7 +13,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Cài đặt {@link IdempotencyStore} bằng Redis.
+ * Kho trạng thái Idempotency-Key bằng Redis, dùng để chặn request trùng TRƯỚC khi chạm DB.
+ * <p>
+ * Kho không truy cập được => ném {@link IdempotencyStoreUnavailableException}.
  * <p>
  * Mỗi Idempotency-Key là một HASH "payment:idem:&lt;keyHash&gt;" với các trường state, token, requestHash, paymentId.
  * Mọi thao tác "đọc rồi ghi" đều nằm trong Lua script: Redis chạy cả script như MỘT lệnh, không lệnh nào
@@ -24,7 +25,7 @@ import java.util.UUID;
 @Component
 @RequiredArgsConstructor
 @EnableConfigurationProperties(IdempotencyStoreProperties.class)
-public class RedisIdempotencyStore implements IdempotencyStore {
+public class RedisIdempotencyStore {
 
     private static final String KEY_PREFIX = "payment:idem:";
 
@@ -60,7 +61,7 @@ public class RedisIdempotencyStore implements IdempotencyStore {
     private final StringRedisTemplate redis;
     private final IdempotencyStoreProperties properties;
 
-    @Override
+    // Chưa có key: ghi IN_PROGRESS kèm token mới (TTL ngắn) và trả Reserved. Đã có key: không ghi gì, trả nội dung hiện có dưới dạng Existing.
     @SuppressWarnings("unchecked")
     public Reservation reserve(String keyHash, String requestHash) {
         String token = UUID.randomUUID().toString();
@@ -95,18 +96,18 @@ public class RedisIdempotencyStore implements IdempotencyStore {
         return index < fields.size() && fields.get(index) instanceof String value ? value : null;
     }
 
-    @Override
+    // Token khớp: chuyển COMPLETED, lưu paymentId, gia hạn TTL dài (mặc định 24h). Token không khớp: không làm gì.
     public void complete(String keyHash, String token, long paymentId) {
         execute(() -> redis.execute(COMPLETE_SCRIPT, List.of(key(keyHash)),
                 token, String.valueOf(paymentId), String.valueOf(properties.getCompletedTtl().toMillis())));
     }
 
-    @Override
+    // Token khớp và vẫn IN_PROGRESS: xoá key để client gửi lại được. Ngược lại: không làm gì.
     public void release(String keyHash, String token) {
         execute(() -> redis.execute(RELEASE_SCRIPT, List.of(key(keyHash)), token));
     }
 
-    // Lỗi kết nối/timeout của Redis được đổi thành lỗi của port để tầng application không phụ thuộc Spring Data Redis.
+    // Lỗi kết nối/timeout của Redis được đổi thành IdempotencyStoreUnavailableException để tầng application không phụ thuộc Spring Data Redis.
     private <T> T execute(java.util.function.Supplier<T> command) {
         try {
             return command.get();
@@ -117,5 +118,27 @@ public class RedisIdempotencyStore implements IdempotencyStore {
 
     private static String key(String keyHash) {
         return KEY_PREFIX + keyHash;
+    }
+
+    public enum State {
+        IN_PROGRESS,
+        COMPLETED
+    }
+
+    public sealed interface Reservation permits Reserved, Existing {
+    }
+
+    // Request này giữ key; token dùng để complete/release đúng bản ghi của mình.
+    public record Reserved(String token) implements Reservation {
+    }
+
+    // Key đã có người giữ hoặc đã xong; paymentId chỉ có khi state = COMPLETED.
+    public record Existing(State state, String requestHash, Long paymentId) implements Reservation {
+    }
+
+    public static class IdempotencyStoreUnavailableException extends RuntimeException {
+        public IdempotencyStoreUnavailableException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 }

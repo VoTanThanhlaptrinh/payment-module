@@ -1,10 +1,11 @@
 package com.thanh.payment.application;
 
+import com.thanh.payment.infrastructure.cache.RedisIdempotencyStore;
 import com.thanh.payment.shared.exception.ApiException;
-import com.thanh.payment.application.IdempotencyStore.Existing;
-import com.thanh.payment.application.IdempotencyStore.IdempotencyStoreUnavailableException;
-import com.thanh.payment.application.IdempotencyStore.Reserved;
-import com.thanh.payment.application.IdempotencyStore.State;
+import com.thanh.payment.infrastructure.cache.RedisIdempotencyStore.Existing;
+import com.thanh.payment.infrastructure.cache.RedisIdempotencyStore.IdempotencyStoreUnavailableException;
+import com.thanh.payment.infrastructure.cache.RedisIdempotencyStore.Reserved;
+import com.thanh.payment.infrastructure.cache.RedisIdempotencyStore.State;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,7 +28,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class IdempotencyGuardTest {
 
-    @Mock IdempotencyStore store;
+    @Mock RedisIdempotencyStore store;
 
     private IdempotencyGuard guard;
 

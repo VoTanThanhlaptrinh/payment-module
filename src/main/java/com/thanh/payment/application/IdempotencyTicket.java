@@ -1,5 +1,6 @@
 package com.thanh.payment.application;
 
+import com.thanh.payment.infrastructure.cache.RedisIdempotencyStore;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -14,12 +15,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 public final class IdempotencyTicket implements AutoCloseable {
 
-    private final IdempotencyStore store;
+    private final RedisIdempotencyStore store;
     private final String keyHash;
     private final String token;
     private final AtomicBoolean done = new AtomicBoolean(false);
 
-    IdempotencyTicket(IdempotencyStore store, String keyHash, String token) {
+    IdempotencyTicket(RedisIdempotencyStore store, String keyHash, String token) {
         this.store = store;
         this.keyHash = keyHash;
         this.token = token;
