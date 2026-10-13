@@ -56,6 +56,17 @@ class FlywayMigrationIntegrationTest {
                 """, Integer.class);
         assertEquals(3, providerDetailColumns);
 
+        Integer orderCodeColumn = jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'transactions' AND column_name = 'provider_order_code'
+                """, Integer.class);
+        assertEquals(1, orderCodeColumn);
+        Long first = jdbcTemplate.queryForObject("SELECT nextval('provider_order_code_seq')", Long.class);
+        Long second = jdbcTemplate.queryForObject("SELECT nextval('provider_order_code_seq')", Long.class);
+        // Bắt đầu từ epoch-ms (> 1e12) và còn xa giới hạn 2^53-1 của payOS.
+        org.junit.jupiter.api.Assertions.assertTrue(first > 1_000_000_000_000L && second == first + 1
+                && second < 9_007_199_254_740_991L);
+
         Integer reconciliationIndex = jdbcTemplate.queryForObject("""
                 SELECT count(*) FROM pg_indexes
                 WHERE schemaname = 'public'

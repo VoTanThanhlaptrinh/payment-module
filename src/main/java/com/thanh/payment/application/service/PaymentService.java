@@ -123,21 +123,21 @@ public class PaymentService
         }
     }
 
-    // Kiểm tra đầu vào theo ràng buộc của VNPay. Chạy trước mọi truy vấn DB để request sai bị loại sớm, không giữ khoá.
+    // Kiểm tra đầu vào chung và ràng buộc số tiền của từng cổng. Chạy trước mọi truy vấn DB để request sai bị loại sớm, không giữ khoá.
     private void validateCreateCommand(CreatePaymentCommand command) {
         if (command.getCurrency() != Currency.VND) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_PAYMENT_REQUEST", "VNPay only supports VND");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_PAYMENT_REQUEST", "Only VND is supported");
         }
         BigDecimal amount = command.getAmount();
-        // VND không có phần lẻ; VNPay yêu cầu tối thiểu 5.000đ.
-        if (amount == null || amount.stripTrailingZeros().scale() > 0
-                || amount.compareTo(BigDecimal.valueOf(5_000)) < 0) {
+        // VND không có phần lẻ. VNPay yêu cầu tối thiểu 5.000đ; cổng khác chỉ cần dương (adapter kiểm tra mức tối thiểu riêng).
+        BigDecimal minimum = command.getMethod() == PaymentMethodType.VNPAY ? BigDecimal.valueOf(5_000) : BigDecimal.ONE;
+        if (amount == null || amount.stripTrailingZeros().scale() > 0 || amount.compareTo(minimum) < 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_AMOUNT",
-                    "VNPay amount must be a whole VND amount of at least 5000");
+                    "Amount must be a whole VND amount of at least " + minimum.toPlainString());
         }
         // VNPay quy định vnp_Amount = số tiền x 100 và tối đa 12 chữ số.
-        BigInteger providerAmount = amount.toBigIntegerExact().multiply(BigInteger.valueOf(100));
-        if (providerAmount.toString().length() > 12) {
+        if (command.getMethod() == PaymentMethodType.VNPAY
+                && amount.toBigIntegerExact().multiply(BigInteger.valueOf(100)).toString().length() > 12) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_AMOUNT", "VNPay amount exceeds protocol limits");
         }
         if (command.getIdempotencyKey() == null

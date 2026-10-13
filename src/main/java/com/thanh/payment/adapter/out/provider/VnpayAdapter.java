@@ -46,6 +46,11 @@ public class VnpayAdapter implements PaymentProvider {
         return properties.isEnabled();
     }
 
+    @Override
+    public int getExpiryMinutes() {
+        return properties.getExpiryMinutes();
+    }
+
     // Dựng URL thanh toán: tham số vnp_* -> canonical (sắp xếp + URL-encode) -> HMAC-SHA512 -> ghép vnp_SecureHash vào cuối.
     // Khách mở URL này sẽ thấy trang thanh toán VNPay; VNPay verify chữ ký bằng cùng secret nên URL bị sửa sẽ bị từ chối.
     @Override

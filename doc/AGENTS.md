@@ -10,7 +10,7 @@ This is a Java 17 Spring Boot payment service built with Maven. Production code 
 - `infrastructure/persistence/`: Spring Data JPA repositories and persistence adapters.
 - `presentation/`: REST controllers and request DTOs.
 
-Tests mirror the production package tree in `src/test/java`. Runtime configuration is in `src/main/resources/application.yaml`; database DDL is in `src/main/resources/db/schema-payments.sql`.
+Tests mirror the production package tree in `src/test/java`. Runtime configuration starts in `src/main/resources/application.yaml` with environment profiles beside it; versioned database DDL is under `src/main/resources/db/migration`.
 
 ## Build, Test, and Development Commands
 

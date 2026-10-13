@@ -5,6 +5,7 @@ package com.thanh.payment.domain.model;
  */
 public enum PaymentMethodType {
     VNPAY,
+    PAYOS,
     MOMO,
     CREDIT_CARD,
     COD,

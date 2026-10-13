@@ -23,17 +23,17 @@ public class CreatePaymentRequest {
     @Positive(message = "Order ID must be positive")
     private Long orderId;
 
-    // Số tiền VND: tối thiểu 5.000, số nguyên, tối đa 10 chữ số (nhân 100 sẽ vừa giới hạn 12 chữ số của vnp_Amount). Quy tắc này được PaymentService kiểm tra lại độc lập.
+    // Số tiền VND: số nguyên dương, tối đa 10 chữ số (nhân 100 sẽ vừa giới hạn 12 chữ số của vnp_Amount). Mức tối thiểu theo từng cổng (VNPay 5.000) do PaymentService/adapter kiểm tra lại độc lập.
     @NotNull(message = "Amount is required")
-    @DecimalMin(value = "5000", message = "VNPay amount must be at least 5000 VND")
-    @Digits(integer = 10, fraction = 0, message = "VNPay amount must be a whole VND amount within protocol limits")
+    @DecimalMin(value = "1", message = "Amount must be at least 1 VND")
+    @Digits(integer = 10, fraction = 0, message = "Amount must be a whole VND amount within protocol limits")
     private BigDecimal amount;
 
-    // Hiện chỉ VND mới được VNPay chấp nhận.
+    // Hiện chỉ VND được hỗ trợ.
     @NotNull(message = "Currency is required")
     private Currency currency;
 
-    // Phương thức thanh toán. Hiện chỉ VNPAY được bật.
+    // Phương thức thanh toán (VNPAY, PAYOS); cổng chưa bật cấu hình bị từ chối với 400 PAYMENT_METHOD_NOT_ENABLED.
     @NotNull(message = "Payment method is required")
     private PaymentMethodType paymentMethod;
 

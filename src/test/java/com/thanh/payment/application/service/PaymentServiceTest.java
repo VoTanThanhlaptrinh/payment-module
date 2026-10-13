@@ -167,6 +167,21 @@ class PaymentServiceTest {
     }
 
     @Test
+    void shouldAllowAmountBelowVnpayMinimumForPayos() {
+        when(paymentProviderFactory.getEnabledProvider(PaymentMethodType.PAYOS)).thenReturn(provider);
+        PaymentResponse created = response(9L);
+        when(idempotencyGuard.acquire(anyString(), anyString()))
+                .thenReturn(new IdempotencyGuard.Acquired(new IdempotencyTicket(store, "k", "token-1")));
+        when(paymentCreator.create(any(), eq(provider), anyString(), anyString(), any())).thenReturn(created);
+        CreatePaymentCommand command = CreatePaymentCommand.builder()
+                .orderId(101L).amount(BigDecimal.valueOf(2_000)).currency(Currency.VND)
+                .method(PaymentMethodType.PAYOS).idempotencyKey("idem-key-0008").clientIp("127.0.0.1")
+                .build();
+
+        assertSame(created, service.createPayment(command));
+    }
+
+    @Test
     void shouldRejectInvalidAmountBeforeAcquiringKey() {
         CreatePaymentCommand command = CreatePaymentCommand.builder()
                 .orderId(101L).amount(BigDecimal.valueOf(4_999)).currency(Currency.VND)

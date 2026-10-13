@@ -14,11 +14,13 @@ Dự án sử dụng Java 17, Spring Boot, Maven, PostgreSQL, Redis, RabbitMQ, J
 ## Kết quả đã đạt được
 
 - Đã xây dựng domain `Payment`, `Transaction`, value object `Money`, tiền tệ, phương thức thanh toán và các trạng thái nghiệp vụ. Các quy tắc hoàn tất, thất bại, hoàn tiền và hết hạn được đóng gói trong entity.
-- Đã có persistence cho `Payment` qua Spring Data JPA. Schema PostgreSQL có index tra cứu `order_id` và partial unique index nhằm giới hạn một payment `PENDING` cho mỗi đơn hàng.
-- Đã có API `POST /api/v1/payments`, validation request và mapping kết quả trả về.
-- Đã định nghĩa `PaymentProvider`, factory chọn provider và adapter cho VNPay, MoMo, chuyển khoản ngân hàng.
-- Đã có ba webhook: `GET /api/v1/payments/webhook/vnpay`, `POST /momo` và `POST /bank`. Webhook có thể ánh xạ kết quả sang trạng thái `COMPLETED` hoặc `FAILED` của payment đang chờ.
-- Có 22 test method: 21 test domain cho `Payment`, `Transaction`, `Money` và một Spring context test sử dụng Testcontainers.
+- Đã có persistence cho `Payment`, `Transaction` và idempotency key. Flyway migration tạo FK, indexes, active-payment constraint và optimistic-lock version columns.
+- `POST /api/v1/payments` bắt buộc `Idempotency-Key`, validate VNPay/VND trước persistence và trả `paymentId`, transaction, signed checkout URL cùng expiry.
+- VNPay PAY 2.1.0 đã dựng URL deterministic, amount ×100, timezone GMT+7, sorted parameters và HMAC-SHA512; MoMo/bank vẫn disabled.
+- VNPay IPN xác minh HMAC constant-time trước database, đối chiếu merchant/reference/amount/provider, khóa transaction và trả acknowledgement theo contract.
+- VNPay QueryDR fallback đã có signed request/response, scheduler 5 phút, giới hạn 12 lần và không ghi đè transaction terminal; có runbook Cloudflare Quick Tunnel cho sandbox IPN.
+- Có 67 test method. 63 unit/MVC test đã chạy pass; bốn context/migration/concurrency test chờ Docker/Testcontainers.
+- OpenAPI đã được Redocly validate; workflow CI chạy JDK 17, Maven verify, OpenAPI lint và secret scan.
 - Lịch sử Git dùng Conventional Commits có scope, thể hiện các mốc domain, kiến trúc, database, provider và webhook tương đối rõ ràng.
 
 ## Ma trận mức độ hoàn thiện
@@ -27,43 +29,43 @@ Dự án sử dụng Java 17, Spring Boot, Maven, PostgreSQL, Redis, RabbitMQ, J
 | --- | --- | --- | --- |
 | Domain payment/transaction | Đã có | Một phần | Có entity, value object và state transition; domain vẫn phụ thuộc annotation JPA. |
 | API thanh toán | Một phần | Chưa có | Mới có tạo payment; chưa có API lấy trạng thái, lịch sử, hủy hoặc refund. |
-| Database | Một phần | Chưa có | Có bảng `payments`; chưa có schema/repository cho `transactions` và chưa dùng migration tool. |
-| Tích hợp provider | Một phần | Chưa có | Có interface, factory và adapter nhưng `processPayment()` đều chưa gọi API thật. |
-| Webhook/IPN | Một phần | Chưa có | Có endpoint và cập nhật trạng thái; xác minh chữ ký hiện chỉ là kiểm tra giả lập. |
+| Database | Một phần | Chưa có | Có Flyway schema/repository cho payment, transaction và idempotency; integration test PostgreSQL chưa chạy. |
+| Tích hợp provider | Một phần | Chưa có | VNPay tạo signed hosted-checkout URL và signed QueryDR fallback; chưa có IPN sandbox E2E, refund, MoMo hoặc bank. |
+| Webhook/IPN | Một phần | Chưa có | VNPay đã xác minh HMAC, mismatch/duplicate và pessimistic lock; public HTTPS IPN E2E vẫn chưa có bằng chứng. |
 | Refund | Chưa có | Chưa có | `RefundCommand` rỗng và `PaymentService.refund()` chưa có logic. |
-| Idempotency/concurrency | Một phần | Chưa có | Có kiểm tra payment `PENDING` và unique index; chưa có idempotency key, event deduplication hoặc xử lý race condition đầy đủ. |
-| Bảo mật | Chưa có | Chưa có | Chưa có xác thực API/webhook thật; credential PostgreSQL đang ghi trực tiếp trong YAML. |
+| Idempotency/concurrency | Một phần | Chưa có | Có request hash, TTL, PostgreSQL advisory locks, active-payment constraint và pessimistic IPN lock; concurrency test PostgreSQL chưa chạy. |
+| Bảo mật | Một phần | Chưa có | VNPay signature và secret externalization đã có; internal API vẫn chưa có authentication/authorization và secret-manager integration. |
 | Redis/RabbitMQ | Chưa có | Chưa có | Dependency và cấu hình đã tồn tại nhưng chưa có producer, consumer, cache hoặc outbox. |
-| Xử lý lỗi | Một phần | Chưa có | Có exception tại domain/service nhưng chưa có `ControllerAdvice` và error response thống nhất. |
+| Xử lý lỗi | Một phần | Chưa có | API thường có `ControllerAdvice` và error envelope; provider contracts ngoài VNPay chưa hoàn thiện. |
 | Observability | Chưa có | Chưa có | Chưa thấy health/metrics nghiệp vụ, tracing, structured logging hoặc audit log. |
-| Testing | Một phần | Chưa có | Domain được test khá tốt; thiếu test service, controller, repository, provider, webhook và coverage gate. |
-| Build/deployment | Một phần | Chưa có | Có Maven Wrapper; chưa có Dockerfile, Compose, pipeline CI/CD hoặc cấu hình triển khai. |
+| Testing | Một phần | Chưa có | Domain/service/VNPay/MVC có 63 test pass; bốn migration/context/concurrency Testcontainers test, E2E sandbox và coverage gate còn thiếu. |
+| Build/deployment | Một phần | Chưa có | Có Maven Wrapper và verify workflow; chưa có Dockerfile, deployment template hoặc CI run được bảo vệ. |
 
 ## Khoảng trống và rủi ro chính
 
-Project hiện là nền tảng MVP có cấu trúc tốt, nhưng chưa phải luồng thanh toán end-to-end: tạo payment chỉ gọi các `processPayment()` rỗng nên chưa sinh URL/QR/token thanh toán từ provider. Chữ ký webhook chưa dùng secret và thuật toán HMAC thực tế; payload cũng chưa được đối chiếu số tiền, tiền tệ hoặc mã giao dịch với dữ liệu đã lưu.
+VNPay hiện đã code-complete ở mức deterministic checkout/IPN/QueryDR. Checkout sandbox đã được thao tác, nhưng chưa có public HTTPS IPN và bằng chứng database chuyển trạng thái từ callback thật. `PRV-04` vì vậy vẫn chưa đạt.
 
-`Transaction` đã có domain model nhưng chưa được lưu. `transactionId` nhận từ webhook được đưa vào `ProcessTransactionCommand` rồi không sử dụng, làm thiếu dấu vết đối soát và chống callback trùng. Các phương thức `CREDIT_CARD` và `COD` có trong enum nhưng không có provider; yêu cầu tạo payment bằng hai phương thức này sẽ bị factory từ chối.
+Transaction/idempotency persistence và các lock đã được triển khai, nhưng chưa thể chạy PostgreSQL integration/concurrency tests vì Docker Desktop chưa hoạt động. Đây là blocker cho việc công nhận migration, rollback và race-condition behavior.
 
-Ngoài ra, `application.port.out.PaymentRepository` đang rỗng và trùng vai trò với `domain.repository.PaymentRepository`. Việc dùng `spring.jpa.hibernate.ddl-auto: update`, image Testcontainers gắn tag `latest`, và credential trong `application.yaml` chưa phù hợp cho môi trường production.
+API public query/refund, authentication/authorization, webhook-event audit, outbox và observability vẫn chưa có. QueryDR nội bộ chỉ phục vụ reconciliation VNPay; MoMo/bank vẫn là skeleton và bị disable trước khi xử lý nghiệp vụ.
 
 ## Roadmap đề xuất
 
 ### P0 — Hoàn thiện tính đúng đắn và an toàn
 
-1. Ngoại hóa toàn bộ credential/secret; tách profile local, test và production.
-2. Triển khai API thật cho provider, trả payment URL/QR/token và xác minh HMAC đúng đặc tả từng cổng.
-3. Bổ sung schema, repository và lifecycle cho `Transaction`; lưu provider transaction ID, lỗi và thời điểm hoàn tất.
-4. Hoàn thiện idempotency cho create payment và webhook, kiểm tra amount/currency/order, xử lý callback lặp và race condition.
-5. Chuẩn hóa exception/error response; bổ sung test service, provider, controller, repository và webhook.
+1. Khởi động Docker Desktop và chạy `./mvnw clean verify` để nghiệm thu Flyway, constraints và context.
+2. Chạy integration/concurrency assertions đã bổ sung cho simultaneous create/IPN và rollback.
+3. Cấu hình Cloudflare public HTTPS IPN và chạy sanitized E2E smoke test.
+4. Thêm authentication/authorization cho payment API và bảo vệ operational endpoints.
+5. Đưa CI workflow thành required branch check và lưu test/security reports.
 
 ### P1 — Hoàn thiện nghiệp vụ MVP mở rộng
 
 1. Triển khai refund toàn phần/một phần và lưu refund transaction.
 2. Thêm API truy vấn payment, transaction và trạng thái theo order.
-3. Bổ sung cơ chế reconciliation với provider, timeout payment và retry có kiểm soát.
+3. Mở rộng reconciliation sang audit/metrics và quy trình xử lý thủ công sau khi QueryDR exhausted.
 4. Đưa RabbitMQ/Redis vào luồng có mục đích rõ ràng; ưu tiên transactional outbox nếu phát sự kiện thanh toán.
-5. Chuyển quản lý schema sang Flyway hoặc Liquibase và bổ sung integration test đầy đủ.
+5. Bổ sung migration roll-forward/rollback runbook và integration test nâng cấp schema.
 
 ### P2 — Sẵn sàng vận hành production
 
@@ -74,4 +76,4 @@ Ngoài ra, `application.port.out.PaymentRepository` đang rỗng và trùng vai 
 
 ## Trạng thái xác minh
 
-Các nhận định trên được đối chiếu với source code, `pom.xml`, `application.yaml`, schema SQL, test và Git history. Lệnh `./mvnw test` chưa thể được xác minh trong môi trường đánh giá vì không có Java (`java: command not found`); đây là giới hạn của môi trường hiện tại, không phải kết luận rằng test của project bị lỗi.
+Source chính compile thành công bằng JDK 17.0.12. Bộ chọn lọc 63 unit/MVC test chạy pass, không có failure/skip. Bốn test Spring context/Flyway/concurrent IPN chưa chạy vì Docker Desktop engine không hoạt động, nên chưa công nhận `clean verify`, migration V2 hoặc các tiêu chí concurrency/CI.

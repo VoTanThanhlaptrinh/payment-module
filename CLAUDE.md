@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A self-built payment gateway module (Java 17, Spring Boot 4.1, Maven, PostgreSQL, Flyway, JPA/Hibernate 7, Lombok). The goal is a hosted-checkout/QR gateway for VNPay, MoMo and bank transfer; the service never handles PAN/CVV. Only **VNPay** is implemented today; MoMo and bank adapters are disabled skeletons. Redis is used only for idempotency keys (`RedisIdempotencyStore`); RabbitMQ is configured but not used by any code yet.
+A self-built payment gateway module (Java 17, Spring Boot 4.1, Maven, PostgreSQL, Flyway, JPA/Hibernate 7, Lombok). The goal is a hosted-checkout/QR gateway for VNPay, MoMo and bank transfer; the service never handles PAN/CVV. **VNPay** is fully implemented (create, IPN, QueryDR); **payOS** can create payment links only (`PayosAdapter`, webhook and reconciliation pending, see `doc/PAYOS_INTEGRATION.md`); MoMo and bank adapters are disabled skeletons. Redis is used only for idempotency keys (`RedisIdempotencyStore`); RabbitMQ is configured but not used by any code yet.
 
 Project docs are in Vietnamese under `doc/`:
 - `doc/PRODUCTION_READINESS_ROADMAP.md` — the source of truth for progress: 121 criteria (ARCH, DAT, API, PRV, WEB, REF, EVT, SEC, REL, OBS, TST, OPS), release gates P0/P1/P2, and the milestone path (M0–M6).
@@ -55,7 +55,8 @@ MoMo/bank go through the older generic path `PaymentService.verifyWebhook` → `
 
 ## Known problems
 
-- `PaymentCreator` calls the provider inside the DB transaction. Fine for VNPay (local URL signing), but a remote provider call (MoMo) must be moved out.
+- `PaymentCreator` calls the provider inside the DB transaction. Fine for VNPay (local URL signing). `PayosAdapter` makes a remote HTTP call there (timeouts 2s+5s, below the 10s transaction timeout), holding the order's active-payment row meanwhile; move the call out (commit PENDING, call, update) before real traffic or before adding MoMo.
+- payOS `orderCode` comes from `provider_order_code_seq` (V5) because TSID ids exceed payOS's 2^53-1 limit; never reset that sequence, payOS rejects reused codes.
 
 ## Conventions
 

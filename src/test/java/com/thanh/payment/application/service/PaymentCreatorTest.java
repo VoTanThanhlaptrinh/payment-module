@@ -1,6 +1,5 @@
 package com.thanh.payment.application.service;
 
-import com.thanh.payment.adapter.out.provider.config.VnpayProperties;
 import com.thanh.payment.application.command.CreatePaymentCommand;
 import com.thanh.payment.application.dto.PaymentResponse;
 import com.thanh.payment.application.exception.ApiException;
@@ -53,9 +52,7 @@ class PaymentCreatorTest {
 
     @BeforeEach
     void setUp() {
-        VnpayProperties properties = new VnpayProperties();
-        properties.setExpiryMinutes(15);
-        creator = new PaymentCreator(paymentRepository, transactionRepository, idempotencyKeyRepository, properties);
+        creator = new PaymentCreator(paymentRepository, transactionRepository, idempotencyKeyRepository);
     }
 
     @Test
@@ -143,7 +140,31 @@ class PaymentCreatorTest {
         verify(idempotencyKeyRepository, never()).saveAndFlush(any());
     }
 
+    @Test
+    void shouldStoreProviderOrderCodeAndUseProviderExpiry() {
+        Payment payment = new Payment(1L, 101L, Money.vnd(50_000), PaymentMethodType.PAYOS);
+        when(paymentRepository.saveAndFlush(any(Payment.class))).thenReturn(payment);
+        Transaction transaction = new Transaction(55L, 1L, Money.vnd(50_000), TransactionType.CHARGE, NOW.plusMinutes(30));
+        when(transactionRepository.saveAndFlush(any(Transaction.class))).thenReturn(transaction);
+        when(provider.getExpiryMinutes()).thenReturn(30);
+        when(provider.processPayment(any())).thenReturn(ProviderCheckoutResult.builder()
+                .transactionId("55")
+                .checkoutUrl("https://pay.payos.vn/web/abc")
+                .expiresAt(NOW.plusMinutes(30))
+                .status(ProviderCheckoutStatus.PENDING)
+                .providerOrderCode(1700000000123L)
+                .build());
+
+        creator.create(command(50_000), provider, "key-hash", "req-hash", NOW);
+
+        assertEquals(1700000000123L, transaction.getProviderOrderCode());
+        ArgumentCaptor<ProviderCheckoutRequest> request = ArgumentCaptor.forClass(ProviderCheckoutRequest.class);
+        verify(provider).processPayment(request.capture());
+        assertEquals(NOW.plusMinutes(30), request.getValue().getExpiresAt());
+    }
+
     private void givenPersistedPaymentAndTransaction() {
+        when(provider.getExpiryMinutes()).thenReturn(15);
         Payment payment = new Payment(1L, 101L, Money.vnd(5_000), PaymentMethodType.VNPAY);
         when(paymentRepository.saveAndFlush(any(Payment.class))).thenReturn(payment);
         Transaction transaction = new Transaction(55L, 1L, Money.vnd(5_000), TransactionType.CHARGE, NOW.plusMinutes(15));

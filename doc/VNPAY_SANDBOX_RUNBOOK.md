@@ -74,6 +74,10 @@ SELECT p.id AS payment_id,
        t.status AS transaction_status,
        t.provider_transaction_id,
        t.provider_response_code,
+       t.paid_at,
+       t.provider_bank_code,
+       t.provider_card_type,
+       t.provider_bank_tran_no,
        t.completed_at
 FROM payments p
 JOIN transactions t ON t.payment_id = p.id
@@ -81,7 +85,24 @@ WHERE t.id = <vnp_TxnRef>;
 ```
 
 Expected values are `COMPLETED`, `SUCCESS`, a non-empty provider transaction ID,
-response code `00`, and a non-null `completed_at`.
+response code `00`, a non-null `paid_at` (VNPay's `vnp_PayDate`, GMT+7), the bank
+fields VNPay sent, and a non-null `completed_at`.
+
+### Acceptance scenarios (evidence for roadmap M1)
+
+Record for each scenario: date/time, `vnp_TxnRef`, the SQL result above (no secrets,
+no signatures, no full checkout URL) and the relevant sanitized log lines.
+
+| # | Scenario | How | Expected |
+| --- | --- | --- | --- |
+| 1 | Successful payment | Pay with the sandbox NCB test card. | IPN `RspCode=00`; `COMPLETED`/`SUCCESS`; `paid_at` set. |
+| 2 | Customer cancels | Click cancel on the VNPay page. | IPN with `vnp_ResponseCode=24`; `FAILED`/`FAILED`; a new payment for the same order is accepted (new `Idempotency-Key`). |
+| 3 | Lost IPN | Stop the tunnel (or point the merchant IPN URL elsewhere) before paying, pay, restart the tunnel; reconciliation must be enabled. | After `expired_at` the scheduler logs a QueryDR outcome and the charge becomes `SUCCESS` without any IPN. |
+| 4 | Abandoned checkout | Create a payment and close the browser. | After `expired_at` + `VNPAY_RECONCILIATION_NOT_FOUND_GRACE` QueryDR answers `91`; payment and transaction become `EXPIRED` and the order is free again. This confirms the assumption about code `91`. |
+
+Save the sanitized request/response samples as fixtures for PRV-06. If scenario 4 shows
+a different code than `91`, adjust `VnpayQueryDrClient.validateAndMap` before enabling
+reconciliation in production.
 
 ## 5. Recover a missed IPN with QueryDR
 

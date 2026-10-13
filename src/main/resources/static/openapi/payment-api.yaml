@@ -120,7 +120,7 @@ components:
         orderId: { type: integer, format: int64, minimum: 1 }
         amount: { type: integer, minimum: 5000, maximum: 9999999999 }
         currency: { type: string, enum: [VND] }
-        paymentMethod: { type: string, enum: [VNPAY] }
+        paymentMethod: { type: string, enum: [VNPAY, PAYOS] }
     PaymentResponse:
       type: object
       required: [paymentId, orderId, totalAmount, currency, method, status, transactionId, checkoutUrl, expiresAt]

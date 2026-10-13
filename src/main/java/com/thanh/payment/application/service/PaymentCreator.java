@@ -1,6 +1,5 @@
 package com.thanh.payment.application.service;
 
-import com.thanh.payment.adapter.out.provider.config.VnpayProperties;
 import com.thanh.payment.application.command.CreatePaymentCommand;
 import com.thanh.payment.application.dto.PaymentResponse;
 import com.thanh.payment.application.exception.ApiException;
@@ -39,7 +38,6 @@ public class PaymentCreator {
     private final PaymentRepository paymentRepository;
     private final TransactionRepository transactionRepository;
     private final IdempotencyKeyRepository idempotencyKeyRepository;
-    private final VnpayProperties vnpayProperties;
 
     /**
      * Tạo mới: Payment(PENDING) + Transaction CHARGE(PENDING) + URL VNPay đã ký + idempotency_keys(COMPLETED).
@@ -113,8 +111,8 @@ public class PaymentCreator {
             throw new IllegalStateException("Payment ID was not generated before transaction creation");
         }
 
-        // Hạn thanh toán (mặc định 15 phút): gửi VNPay làm vnp_ExpireDate và cũng là mốc bắt đầu đối soát nếu mất IPN.
-        OffsetDateTime expiresAt = now.plusMinutes(vnpayProperties.getExpiryMinutes());
+        // Hạn thanh toán theo cấu hình của provider (mặc định 15 phút): gửi cổng làm hạn và cũng là mốc bắt đầu đối soát nếu mất callback.
+        OffsetDateTime expiresAt = now.plusMinutes(provider.getExpiryMinutes());
         // Tạo lần thử thanh toán (CHARGE, PENDING). Id của Transaction này sẽ là vnp_TxnRef.
         Transaction transaction = transactionRepository.saveAndFlush(
                 Transaction.createCharge(payment.getId(), amount, now, expiresAt));
@@ -122,7 +120,8 @@ public class PaymentCreator {
             throw new IllegalStateException("Transaction ID was not generated before checkout creation");
         }
 
-        // Nhờ adapter dựng phiên thanh toán. Với VNPay chỉ là ký URL cục bộ (không gọi mạng) nên chấp nhận được khi đang giữ DB transaction.
+        // Nhờ adapter dựng phiên thanh toán. VNPay chỉ ký URL cục bộ; payOS gọi HTTP ra ngoài (timeout ngắn hơn transaction timeout)
+        // nên đang giữ DB transaction trong lúc chờ. Chấp nhận được ở quy mô hiện tại, xem "Known problems" trong CLAUDE.md.
         ProviderCheckoutResult checkout = provider.processPayment(ProviderCheckoutRequest.builder()
                 .paymentId(payment.getId())
                 .transactionId(transaction.getId())
@@ -135,6 +134,9 @@ public class PaymentCreator {
 
         // Lưu URL đã ký vào Transaction (phục vụ replay idempotency).
         transaction.attachCheckout(checkout.getCheckoutUrl(), checkout.getExpiresAt());
+        if (checkout.getProviderOrderCode() != null) {
+            transaction.assignProviderOrderCode(checkout.getProviderOrderCode());
+        }
         transactionRepository.save(transaction);
         // Bước cuối: key chuyển COMPLETED và gắn payment_id (UPDATE trong cùng transaction).
         key.complete(payment.getId());

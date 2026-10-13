@@ -37,3 +37,18 @@ payment:
       reconciliation-batch-size: ${VNPAY_RECONCILIATION_BATCH_SIZE:50}
       query-connect-timeout: ${VNPAY_QUERY_CONNECT_TIMEOUT:3s}
       query-read-timeout: ${VNPAY_QUERY_READ_TIMEOUT:5s}
+    payos:
+      enabled: ${PAYOS_ENABLED:false}
+      client-id: ${PAYOS_CLIENT_ID:}
+      api-key: ${PAYOS_API_KEY:}
+      checksum-key: ${PAYOS_CHECKSUM_KEY:}
+      partner-code: ${PAYOS_PARTNER_CODE:}
+      api-url: ${PAYOS_API_URL:https://api-merchant.payos.vn}
+      return-url: ${PAYOS_RETURN_URL:}
+      cancel-url: ${PAYOS_CANCEL_URL:}
+      expiry-minutes: ${PAYOS_EXPIRY_MINUTES:15}
+      min-amount: ${PAYOS_MIN_AMOUNT:2000}
+      description-prefix: ${PAYOS_DESCRIPTION_PREFIX:DH}
+      description-max-length: ${PAYOS_DESCRIPTION_MAX_LENGTH:9}
+      connect-timeout: ${PAYOS_CONNECT_TIMEOUT:2s}
+      read-timeout: ${PAYOS_READ_TIMEOUT:5s}

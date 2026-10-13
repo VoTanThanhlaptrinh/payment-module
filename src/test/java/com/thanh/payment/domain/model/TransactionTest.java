@@ -141,4 +141,19 @@ class TransactionTest {
         assertEquals("INVALID_LOCAL_STATE", tx.getLastReconciliationCode());
         assertEquals(TransactionStatus.PENDING, tx.getStatus());
     }
+
+    @Test
+    @DisplayName("assignProviderOrderCode chỉ gán một lần cho giao dịch PENDING")
+    void shouldAssignProviderOrderCodeOnce() {
+        Transaction tx = Transaction.createCharge(2001L, Money.vnd(150000), OffsetDateTime.now().plusMinutes(15));
+
+        tx.assignProviderOrderCode(1700000000123L);
+        tx.assignProviderOrderCode(1700000000123L);
+
+        assertEquals(1700000000123L, tx.getProviderOrderCode());
+        assertThrows(IllegalStateException.class, () -> tx.assignProviderOrderCode(1700000000124L));
+        assertThrows(IllegalArgumentException.class, () -> tx.assignProviderOrderCode(0L));
+        tx.markFailed("declined");
+        assertThrows(IllegalStateException.class, () -> tx.assignProviderOrderCode(1700000000123L));
+    }
 }

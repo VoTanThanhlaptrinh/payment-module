@@ -111,6 +111,10 @@ public class Transaction {
     @Column(name = "paid_at", nullable = true)
     private OffsetDateTime paidAt;
 
+    // Mã đơn dạng số do provider yêu cầu (payOS orderCode, tối đa 2^53-1) lấy từ sequence provider_order_code_seq. Webhook của provider tra giao dịch bằng mã này.
+    @Column(name = "provider_order_code")
+    private Long providerOrderCode;
+
     // Ngân hàng khách dùng (vnp_BankCode), loại thẻ (vnp_CardType) và mã giao dịch phía ngân hàng (vnp_BankTranNo): dữ liệu để đối chiếu sao kê.
     @Column(name = "provider_bank_code", length = 20)
     private String providerBankCode;
@@ -362,6 +366,20 @@ public class Transaction {
         this.lastReconciliationCode = responseCode;
         this.reconciliationExhausted = this.reconciliationAttempts >= maxAttempts;
         this.nextReconciliationAt = this.reconciliationExhausted ? null : nextAttemptAt;
+    }
+
+    // Gán mã đơn số của provider ngay sau khi tạo phiên thanh toán. Chỉ gán một lần cho giao dịch PENDING.
+    public void assignProviderOrderCode(Long code) {
+        if (code == null || code <= 0) {
+            throw new IllegalArgumentException("Provider order code must be positive");
+        }
+        if (this.status != TransactionStatus.PENDING) {
+            throw new IllegalStateException("Provider order code can only be assigned to a pending transaction");
+        }
+        if (this.providerOrderCode != null && !this.providerOrderCode.equals(code)) {
+            throw new IllegalStateException("Provider order code is already assigned");
+        }
+        this.providerOrderCode = code;
     }
 
     /**

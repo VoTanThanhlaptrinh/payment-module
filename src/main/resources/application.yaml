@@ -42,3 +42,18 @@ payment:
       reconciliation-batch-size: 50
       query-connect-timeout: 3s
       query-read-timeout: 5s
+    payos:
+      enabled: false
+      client-id: ""
+      api-key: ""
+      checksum-key: ""
+      partner-code: ""
+      api-url: https://api-merchant.payos.vn
+      return-url: ""
+      cancel-url: ""
+      expiry-minutes: 15
+      min-amount: 2000
+      description-prefix: DH
+      description-max-length: 9     # 9 ký tự với tài khoản ngân hàng không liên kết qua payOS, tối đa 25 nếu liên kết qua payOS
+      connect-timeout: 2s           # connect + read phải nhỏ hơn payment.idempotency.max-processing-time-seconds (cuộc gọi chạy trong DB transaction)
+      read-timeout: 5s
