@@ -9,7 +9,7 @@
 - **Một phần:** Đã có mô hình hoặc luồng chính nhưng còn giả lập, thiếu kết nối, persistence hoặc kiểm thử cần thiết.
 - **Chưa có:** Chưa thấy triển khai trong repository.
 
-Dự án sử dụng Java 17, Spring Boot, Maven, PostgreSQL, Redis, RabbitMQ, JPA, Lombok, JUnit 5 và Testcontainers. Cấu trúc package đi theo hướng hexagonal với các lớp `domain`, `application`, `adapter`, `infrastructure` và `presentation`, phù hợp với hướng dẫn trong `AGENTS.md`.
+Dự án sử dụng Java 17, Spring Boot, Maven, PostgreSQL, Redis, RabbitMQ, JPA, Lombok, JUnit 5 và Testcontainers. Cấu trúc package là một context chia lớp như job-backend: `api`, `application`, `domain`, `mapper`, `shared` và `infrastructure` (mỗi provider một package con), phù hợp với hướng dẫn trong `AGENTS.md`.
 
 ## Kết quả đã đạt được
 

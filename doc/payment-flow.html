@@ -128,8 +128,8 @@ mark{background:#fde68a;color:#000;border-radius:3px}
 
 <!-- 1 -->
 <section id="s-arch">
-  <h2><span class="n">1</span>Kiến trúc hexagonal</h2>
-  <p class="lead">Bấm vào từng tầng để xem trách nhiệm và các class tiêu biểu. Quy tắc: tầng trong (domain) không biết gì về Spring hay VNPay.</p>
+  <h2><span class="n">1</span>Cấu trúc package</h2>
+  <p class="lead">Bấm vào từng tầng để xem trách nhiệm và các class tiêu biểu. Luồng đi một chiều: api → application → domain; code riêng của từng cổng nằm trong infrastructure/provider.</p>
   <div class="grid g2">
     <div class="layers" id="layers"></div>
     <div class="card" id="layerInfo"></div>
@@ -369,25 +369,21 @@ document.addEventListener('click', e => {
 
 /* ===================== 1. Kiến trúc ===================== */
 const LAYERS = [
-  {id:'presentation', name:'presentation', sub:'Cổng HTTP vào',
-   desc:'Nhận request HTTP, ánh xạ sang command và trả lỗi theo một envelope thống nhất.',
+  {id:'api', name:'api', sub:'Cổng HTTP vào',
+   desc:'Nhận request HTTP, ánh xạ sang command và trả lỗi theo một envelope thống nhất. api/dto chứa request/response và payload webhook.',
    cls:['PaymentController – POST /api/v1/payments','WebhookController – IPN (GET /api/v1/payments/webhook/vnpay) và Return URL','GlobalExceptionHandler – {code, message, traceId, timestamp, fieldErrors}'],
    rule:'IPN luôn trả HTTP 200 kèm RspCode của VNPay; API merchant dùng mã HTTP chuẩn (400/409…).'},
-  {id:'application', name:'application', sub:'Use case + cổng (port)',
-   desc:'Điều phối nghiệp vụ. Định nghĩa port vào (use case) và port ra (provider, verifier, lock, query). Không biết JPA hay HTTP.',
-   cls:['PaymentService – createPayment (idempotency, khoá, ghi DB)','VnpayIpnService – verify chữ ký trước khi chạm DB','VnpayIpnProcessor – @Transactional, khoá hàng, map mã → trạng thái','VnpayReconciliationService/Processor – QueryDR','ApiException – HTTP status + error code + Retry-After','Port out: PaymentProvider, WebhookVerifier, IdempotencyLock, VnpayTransactionQuery'],
-   rule:'Tên port theo năng lực (CreatePaymentUseCase); tên adapter theo vai trò (VnpayAdapter, PaymentRepositoryImpl).'},
+  {id:'application', name:'application', sub:'Service điều phối nghiệp vụ',
+   desc:'Các class @Service cụ thể mà controller inject thẳng (không có interface UseCase). application/provider giữ interface strategy PaymentProvider và WebhookVerifier, mỗi provider một implementation.',
+   cls:['PaymentService – createPayment (idempotency, khoá, ghi DB)','PaymentCreator – một transaction DB, dịch lỗi unique thành exception domain','VnpayIpnService – verify chữ ký trước khi chạm DB','VnpayIpnProcessor – @Transactional, khoá hàng, map mã → trạng thái','VnpayReconciliationService/Processor – QueryDR','shared/exception/ApiException – HTTP status + error code + Retry-After'],
+   rule:'Service là class cụ thể (không XxxUseCase, không XxxServiceImpl). Chỉ tạo interface khi có nhiều implementation thật, như PaymentProvider.'},
   {id:'domain', name:'domain', sub:'Lõi nghiệp vụ',
-   desc:'Chứa luật trạng thái, không phụ thuộc Spring hay provider.',
-   cls:['Payment (aggregate root) – markCompleted/Failed/Expired/ReviewRequired/Refunded…','Transaction – CHARGE/REFUND, markSuccess/…, reconciliation attempts','Money – chuẩn hoá số tiền + tiền tệ','IdempotencyKey – state IN_PROGRESS/COMPLETED, hết hạn 24h','Repository interfaces'],
+   desc:'Entity JPA chứa luật trạng thái; repository là interface Spring Data dùng trực tiếp.',
+   cls:['Payment (aggregate root) – markCompleted/Failed/Expired/ReviewRequired/Refunded…','Transaction – CHARGE/REFUND, markSuccess/…, reconciliation attempts','Money – chuẩn hoá số tiền + tiền tệ','IdempotencyKey – state IN_PROGRESS/COMPLETED, hết hạn 24h','PaymentRepository / TransactionRepository / IdempotencyKeyRepository – extends JpaRepository'],
    rule:'ID dạng TSID (@Tsid) nên có trước khi INSERT trả về → dùng được làm vnp_TxnRef.'},
-  {id:'adapter', name:'adapter/out/provider', sub:'Nói chuyện với VNPay',
-   desc:'Triển khai port ra cho VNPay: tạo URL, ký/verify, QueryDR.',
-   cls:['VnpayAdapter – dựng tham số vnp_* và checkout URL','VnpaySignatureService – canonicalize + HMAC-SHA512 + so sánh hằng thời gian','VnpayIpnVerifier – gom tham số, bỏ SecureHash, verify','VnpayQueryDrClient/Codec – gọi API tra cứu có chữ ký','VnpayProperties – cấu hình validate từ payment.providers.vnpay.*'],
-   rule:'MomoAdapter / BankAdapter chỉ là skeleton bị tắt.'},
-  {id:'infra', name:'infrastructure', sub:'Hạ tầng',
-   desc:'JPA repository, khoá, lịch chạy, Clock.',
-   cls:['PaymentRepositoryImpl / TransactionRepositoryImpl (findByIdForUpdate)','PostgresIdempotencyLock – pg_try_advisory_xact_lock','VnpayReconciliationScheduler – @Scheduled mỗi 5 phút','Bean Clock (test truyền Clock cố định)','Flyway: V1 schema, V2 reconciliation, V3 paid_at'],
+  {id:'infra', name:'infrastructure', sub:'Provider và hạ tầng',
+   desc:'infrastructure/provider/<tên> chứa mọi thứ riêng của từng cổng (tạo URL, ký/verify, QueryDR, cấu hình). Còn lại là Redis, lịch chạy, Clock.',
+   cls:['provider/vnpay: VnpayAdapter, VnpaySignatureService (HMAC-SHA512), VnpayIpnVerifier, VnpayQueryDrClient/Codec, VnpayProperties','provider/payos, momo, bank: các adapter còn lại (momo/bank là skeleton bị tắt)','cache/RedisIdempotencyStore – khoá idempotency bằng Lua script nguyên tử','job/VnpayReconciliationScheduler – @Scheduled mỗi 5 phút','Bean Clock (test truyền Clock cố định)','Flyway: V1 schema, V2 reconciliation, V3 paid_at'],
    rule:'Flyway sở hữu schema; Hibernate chỉ validate. Thêm field entity = phải có migration mới.'}
 ];
 function renderLayers(sel){

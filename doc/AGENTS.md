@@ -2,13 +2,14 @@
 
 ## Project Structure & Module Organization
 
-This is a Java 17 Spring Boot payment service built with Maven. Production code lives under `src/main/java/com/thanh/payment` and follows a hexagonal structure:
+This is a Java 17 Spring Boot payment service built with Maven. Production code lives under `src/main/java/com/thanh/payment` as a single layered context (same shape as the job-backend project):
 
-- `domain/`: payment and transaction models, value objects, and repository contracts.
-- `application/`: use-case ports, commands, DTOs, mappers, and orchestration services.
-- `adapter/out/provider/`: integrations for bank, MoMo, and VNPay providers.
-- `infrastructure/persistence/`: Spring Data JPA repositories and persistence adapters.
-- `presentation/`: REST controllers and request DTOs.
+- `api/`: REST controllers, the exception handler, request/response DTOs (`api/dto`) and webhook payloads (`api/dto/webhook`).
+- `application/`: concrete service classes, commands, and the provider strategy interfaces (`application/provider`).
+- `domain/`: payment and transaction models, value objects, and Spring Data repository interfaces (`domain/repository`).
+- `mapper/`, `shared/exception/`: entity/DTO mapping and the shared `ApiException`.
+- `infrastructure/provider/<name>/`: one package per provider (VNPay, payOS, MoMo, bank).
+- `infrastructure/{cache,persistence,job,config}/`: Redis idempotency store, sequence generator, schedulers, and configuration.
 
 Tests mirror the production package tree in `src/test/java`. Runtime configuration starts in `src/main/resources/application.yaml` with environment profiles beside it; versioned database DDL is under `src/main/resources/db/migration`.
 
@@ -25,7 +26,7 @@ On Windows, replace `./mvnw` with `mvnw.cmd`.
 
 ## Coding Style & Naming Conventions
 
-Use four-space indentation for Java and two spaces for YAML. Follow standard Java naming: `PascalCase` types, `camelCase` methods and fields, and `UPPER_SNAKE_CASE` enum constants. Keep domain logic free of Spring and provider concerns. Name ports by capability (`CreatePaymentUseCase`) and implementations/adapters by role (`PaymentRepositoryImpl`, `VnpayAdapter`). Lombok is enabled; use it consistently without hiding important domain behavior. No formatter or linter is configured, so format changed files with the IDE before committing.
+Use four-space indentation for Java and two spaces for YAML. Follow standard Java naming: `PascalCase` types, `camelCase` methods and fields, and `UPPER_SNAKE_CASE` enum constants. Keep domain logic free of Spring and provider concerns. Use concrete service classes (no `XxxUseCase` or `XxxServiceImpl`) and name provider adapters by role (`VnpayAdapter`). Lombok is enabled; use it consistently without hiding important domain behavior. No formatter or linter is configured, so format changed files with the IDE before committing.
 
 ## Testing Guidelines
 

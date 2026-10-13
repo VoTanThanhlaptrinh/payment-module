@@ -126,7 +126,7 @@ Thứ tự dưới đây là đường ngắn nhất từ hiện trạng đến 
 - [ ] **ARCH-04** — Dependency rule được ghi thành ADR và kiểm tra tự động bằng ArchUnit; domain không phụ thuộc presentation/provider. Bằng chứng đạt: ADR và architecture test chạy trong CI.
 - [ ] **ARCH-05** — Có profile `local`, `test`, `staging`, `production`; production không dùng `ddl-auto: update` hoặc `show-sql`. Bằng chứng đạt: cấu hình profile và test binding.
 - [ ] **ARCH-06** — Mọi credential, provider secret và broker password đến từ secret store/environment, không có giá trị thật trong Git. Bằng chứng đạt: config placeholder và secret scan pass.
-- [x] **ARCH-07** — API từ chối `COD`/`CREDIT_CARD` và mọi method chưa enable trước persistence. Bằng chứng: [`PaymentService.java`](../src/main/java/com/thanh/payment/application/service/PaymentService.java), [`PaymentServiceTest.java`](../src/test/java/com/thanh/payment/application/service/PaymentServiceTest.java).
+- [x] **ARCH-07** — API từ chối `COD`/`CREDIT_CARD` và mọi method chưa enable trước persistence. Bằng chứng: [`PaymentService.java`](../src/main/java/com/thanh/payment/application/PaymentService.java), [`PaymentServiceTest.java`](../src/test/java/com/thanh/payment/application/PaymentServiceTest.java).
 
 **Tiến độ hiện tại:** Repository port trùng đã được loại bỏ và capability chưa enable bị chặn trước persistence. Đã có profile `local`, `test`, `staging`, `production`, config production không còn secret fallback. **Cập nhật 10/10:** Hibernate vẫn dùng `ddl-auto: update` ở mọi profile và `local` là profile mặc định (xem M0); ARCH-05/06 vẫn chờ sửa cấu hình, profile binding test và secret-scan CI pass.
 
@@ -138,7 +138,7 @@ Thứ tự dưới đây là đường ngắn nhất từ hiện trạng đến 
 - [x] **DAT-02** — `Money` chuẩn hóa precision/scale, currency và kiểm tra phép toán khác tiền tệ. Bằng chứng: [`Money.java`](../src/main/java/com/thanh/payment/domain/valueobject/Money.java).
 - [x] **DAT-03** — `Transaction` mô hình hóa charge/refund, success/failed/expired và provider transaction ID. Bằng chứng: [`Transaction.java`](../src/main/java/com/thanh/payment/domain/model/Transaction.java).
 - [ ] **DAT-04** — Domain chặn order ID không hợp lệ, số tiền không dương, currency/method không hỗ trợ và refund vượt số đã thu. Bằng chứng đạt: invariant tests ở domain/service.
-- [ ] **DAT-05** — `Payment` có JPA repository, persistence adapter và schema tương ứng. Bằng chứng: [`PaymentRepositoryImpl.java`](../src/main/java/com/thanh/payment/infrastructure/persistence/PaymentRepositoryImpl.java), [`V1__payment_schema.sql`](../src/main/resources/db/migration/V1__payment_schema.sql).
+- [ ] **DAT-05** — `Payment` có JPA repository, persistence adapter và schema tương ứng. Bằng chứng: [`PaymentRepository.java`](../src/main/java/com/thanh/payment/domain/repository/PaymentRepository.java), [`V1__payment_schema.sql`](../src/main/resources/db/migration/V1__payment_schema.sql).
 - [ ] **DAT-06** — Database giới hạn một payment active trên mỗi order. Bằng chứng: partial unique index trong [`V1__payment_schema.sql`](../src/main/resources/db/migration/V1__payment_schema.sql).
 - [ ] **DAT-07** — `Transaction` có schema, repository, index theo payment/provider reference và foreign key hợp lệ. Bằng chứng đạt: migration + integration test.
 - [ ] **DAT-08** — Toàn bộ schema được quản lý bằng Flyway/Liquibase với migration tiến/lùi có quy trình rõ ràng. Bằng chứng đạt: versioned migrations và migration test từ database rỗng.
@@ -151,14 +151,14 @@ Thứ tự dưới đây là đường ngắn nhất từ hiện trạng đến 
 
 **Kết quả mong muốn:** API ổn định, idempotent, có thể tạo và truy vấn payment/refund bằng contract được tài liệu hóa.
 
-- [x] **API-01** — Có endpoint tạo payment và Bean Validation cho các trường bắt buộc/số tiền dương. Bằng chứng: [`PaymentController.java`](../src/main/java/com/thanh/payment/presentation/controller/PaymentController.java), [`CreatePaymentRequest.java`](../src/main/java/com/thanh/payment/presentation/dto/CreatePaymentRequest.java).
+- [x] **API-01** — Có endpoint tạo payment và Bean Validation cho các trường bắt buộc/số tiền dương. Bằng chứng: [`PaymentController.java`](../src/main/java/com/thanh/payment/api/PaymentController.java), [`CreatePaymentRequest.java`](../src/main/java/com/thanh/payment/api/dto/CreatePaymentRequest.java).
 - [ ] **API-02** — `POST /api/v1/payments` bắt buộc `Idempotency-Key`; retry cùng payload trả cùng kết quả, payload khác trả conflict. Bằng chứng đạt: API/service/concurrency tests.
-- [x] **API-03** — Create response trả `paymentId`, trạng thái, signed `checkoutUrl`, `expiresAt` và không trả secret; giữ `id` deprecated để tương thích. Bằng chứng: [`PaymentResponse.java`](../src/main/java/com/thanh/payment/application/dto/PaymentResponse.java), [`payment-api.yaml`](../src/main/resources/static/openapi/payment-api.yaml), [`PaymentControllerTest.java`](../src/test/java/com/thanh/payment/presentation/controller/PaymentControllerTest.java).
+- [x] **API-03** — Create response trả `paymentId`, trạng thái, signed `checkoutUrl`, `expiresAt` và không trả secret; giữ `id` deprecated để tương thích. Bằng chứng: [`PaymentResponse.java`](../src/main/java/com/thanh/payment/api/dto/PaymentResponse.java), [`payment-api.yaml`](../src/main/resources/static/openapi/payment-api.yaml), [`PaymentControllerTest.java`](../src/test/java/com/thanh/payment/api/PaymentControllerTest.java).
 - [ ] **API-04** — Có `GET /api/v1/payments/{paymentId}` với authorization và trạng thái hiện tại. Bằng chứng đạt: contract + service/controller tests.
 - [ ] **API-05** — Có truy vấn payment/transaction theo `orderId` với pagination khi trả danh sách. Bằng chứng đạt: OpenAPI + repository/controller tests.
 - [ ] **API-06** — Có `POST /api/v1/payments/{paymentId}/refunds` hỗ trợ full/partial refund và idempotency. Bằng chứng đạt: contract + E2E sandbox test.
 - [ ] **API-07** — Mọi lỗi dùng envelope thống nhất gồm `code`, `message`, `traceId`, `timestamp`, `fieldErrors`; không lộ stack trace. Bằng chứng đạt: `ControllerAdvice` + negative tests.
-- [x] **API-08** — Public route có version `/api/v1`. Bằng chứng: [`PaymentController.java`](../src/main/java/com/thanh/payment/presentation/controller/PaymentController.java), [`WebhookController.java`](../src/main/java/com/thanh/payment/presentation/controller/WebhookController.java).
+- [x] **API-08** — Public route có version `/api/v1`. Bằng chứng: [`PaymentController.java`](../src/main/java/com/thanh/payment/api/PaymentController.java), [`WebhookController.java`](../src/main/java/com/thanh/payment/api/WebhookController.java).
 - [ ] **API-09** — OpenAPI mô tả request/response, status code, enum, idempotency và ví dụ cho mọi endpoint. Bằng chứng đạt: spec được validate trong CI.
 
 **Tiến độ hiện tại (11/10/2026):** Create API bắt buộc `Idempotency-Key`; Redis giữ key nguyên tử (Lua) làm lớp chặn nhanh, PostgreSQL unique (`uq_idempotency_scope_key`, `uq_payments_order_id_active`) làm lớp bảo vệ cuối, kể cả khi Redis mất dữ liệu; Redis sập trả 503. Đã có unit test và `IdempotencyEndToEndIntegrationTest` (Testcontainers) nhưng chưa chạy trên CI/PostgreSQL thật nên API-02 chưa được tick. Chưa có xác thực nên Idempotency-Key vẫn là không gian chung (SEC-03).
@@ -167,11 +167,11 @@ Thứ tự dưới đây là đường ngắn nhất từ hiện trạng đến 
 
 **Kết quả mong muốn:** Cả ba provider tạo giao dịch thật qua hosted checkout/QR, có mapping ổn định và được kiểm thử với sandbox.
 
-- [x] **PRV-01** — Có `PaymentProvider` abstraction và factory chọn adapter theo method. Bằng chứng: [`PaymentProvider.java`](../src/main/java/com/thanh/payment/application/port/out/PaymentProvider.java), [`PaymentProviderFactory.java`](../src/main/java/com/thanh/payment/application/service/PaymentProviderFactory.java).
+- [x] **PRV-01** — Có `PaymentProvider` abstraction và factory chọn adapter theo method. Bằng chứng: [`PaymentProvider.java`](../src/main/java/com/thanh/payment/application/provider/PaymentProvider.java), [`PaymentProviderFactory.java`](../src/main/java/com/thanh/payment/application/PaymentProviderFactory.java).
 - [ ] **PRV-02** — Contract provider dùng typed request/result cho create, query, refund; không dùng `Object` payload ở application boundary. Bằng chứng đạt: interface + compile-time tests.
 - [ ] **PRV-03** — HTTP client chung cấu hình connect/read timeout, correlation ID, TLS validation và retry chỉ cho thao tác an toàn. Bằng chứng đạt: config + failure tests.
 - [ ] **PRV-04** — VNPay tạo hosted checkout thật, lưu provider reference và expiry. Bằng chứng đạt: sandbox create-payment test.
-- [x] **PRV-05** — VNPay mapping success, review-required, declined, timeout và unknown; unknown không mặc định success. Bằng chứng: [`VnpayIpnProcessor.java`](../src/main/java/com/thanh/payment/application/service/VnpayIpnProcessor.java), [`VnpayIpnProcessorTest.java`](../src/test/java/com/thanh/payment/application/service/VnpayIpnProcessorTest.java).
+- [x] **PRV-05** — VNPay mapping success, review-required, declined, timeout và unknown; unknown không mặc định success. Bằng chứng: [`VnpayIpnProcessor.java`](../src/main/java/com/thanh/payment/application/VnpayIpnProcessor.java), [`VnpayIpnProcessorTest.java`](../src/test/java/com/thanh/payment/application/VnpayIpnProcessorTest.java).
 - [ ] **PRV-06** — VNPay có contract test chạy với sandbox hoặc deterministic stub theo payload thật. Bằng chứng đạt: test report trong CI.
 - [ ] **PRV-07** — MoMo tạo hosted checkout/QR thật, lưu provider reference và expiry. Bằng chứng đạt: sandbox create-payment test.
 - [ ] **PRV-08** — MoMo mapping đầy đủ success/pending/declined/timeout và mã lỗi chuẩn nội bộ. Bằng chứng đạt: mapping unit tests.
@@ -187,10 +187,10 @@ Thứ tự dưới đây là đường ngắn nhất từ hiện trạng đến 
 
 **Kết quả mong muốn:** Callback được xác thực theo đúng đặc tả, xử lý đúng một lần về mặt nghiệp vụ và phản hồi đúng contract provider.
 
-- [x] **WEB-01** — Có route nhận VNPay IPN và bind payload. Bằng chứng: [`WebhookController.java`](../src/main/java/com/thanh/payment/presentation/controller/WebhookController.java).
-- [x] **WEB-02** — Có route nhận MoMo IPN và bind payload. Bằng chứng: [`WebhookController.java`](../src/main/java/com/thanh/payment/presentation/controller/WebhookController.java).
-- [x] **WEB-03** — Có route nhận bank webhook và bind payload. Bằng chứng: [`WebhookController.java`](../src/main/java/com/thanh/payment/presentation/controller/WebhookController.java).
-- [x] **WEB-04** — VNPay secure hash được canonicalize và xác minh HMAC-SHA512 constant-time bằng secret từ environment. Bằng chứng: [`VnpaySignatureService.java`](../src/main/java/com/thanh/payment/adapter/out/provider/VnpaySignatureService.java), [`VnpayIpnVerifierTest.java`](../src/test/java/com/thanh/payment/adapter/out/provider/VnpayIpnVerifierTest.java).
+- [x] **WEB-01** — Có route nhận VNPay IPN và bind payload. Bằng chứng: [`WebhookController.java`](../src/main/java/com/thanh/payment/api/WebhookController.java).
+- [x] **WEB-02** — Có route nhận MoMo IPN và bind payload. Bằng chứng: [`WebhookController.java`](../src/main/java/com/thanh/payment/api/WebhookController.java).
+- [x] **WEB-03** — Có route nhận bank webhook và bind payload. Bằng chứng: [`WebhookController.java`](../src/main/java/com/thanh/payment/api/WebhookController.java).
+- [x] **WEB-04** — VNPay secure hash được canonicalize và xác minh HMAC-SHA512 constant-time bằng secret từ environment. Bằng chứng: [`VnpaySignatureService.java`](../src/main/java/com/thanh/payment/infrastructure/provider/vnpay/VnpaySignatureService.java), [`VnpayIpnVerifierTest.java`](../src/test/java/com/thanh/payment/infrastructure/provider/vnpay/VnpayIpnVerifierTest.java).
 - [ ] **WEB-05** — MoMo signature được canonicalize và xác minh HMAC-SHA256 constant-time. Bằng chứng đạt: official vectors + tamper tests.
 - [ ] **WEB-06** — Bank signature được xác minh đúng thuật toán/field order của đối tác. Bằng chứng đạt: official vectors + tamper tests.
 - [ ] **WEB-07** — Callback quá hạn hoặc replay bị chặn bằng timestamp/nonce theo khả năng của provider. Bằng chứng đạt: replay tests và audit event.
@@ -234,7 +234,7 @@ Thứ tự dưới đây là đường ngắn nhất từ hiện trạng đến 
 
 **Kết quả mong muốn:** Giảm phạm vi PCI bằng hosted checkout, bảo vệ secret/dữ liệu và lưu audit không thể chối bỏ.
 
-- [x] **SEC-01** — Public payment/webhook DTO hiện không nhận PAN, CVV hoặc dữ liệu thẻ thô. Bằng chứng: [`presentation/dto`](../src/main/java/com/thanh/payment/presentation/dto), [`dto/webhook`](../src/main/java/com/thanh/payment/application/dto/webhook).
+- [x] **SEC-01** — Public payment/webhook DTO hiện không nhận PAN, CVV hoặc dữ liệu thẻ thô. Bằng chứng: [`api/dto`](../src/main/java/com/thanh/payment/api/dto), [`dto/webhook`](../src/main/java/com/thanh/payment/api/dto/webhook).
 - [x] **SEC-02** — Entity/schema hiện không có cột PAN/CVV. Bằng chứng: [`domain/model`](../src/main/java/com/thanh/payment/domain/model), [`V1__payment_schema.sql`](../src/main/resources/db/migration/V1__payment_schema.sql).
 - [ ] **SEC-03** — Internal API có authentication và authorization theo service/user scope; webhook chỉ dựa vào verified provider identity/signature. Bằng chứng đạt: security config + authorization tests.
 - [ ] **SEC-04** — TLS bắt buộc cho inbound/outbound; certificate/hostname validation không bị tắt. Bằng chứng đạt: deployment config + TLS tests.

@@ -50,7 +50,7 @@
 
 - [ ] **VN-05** — Bổ sung schema `transactions` với FK tới `payments`, index theo `payment_id`, unique/index phù hợp cho provider reference. Bằng chứng: schema/migration và database integration test.
 - [ ] **VN-06** — Tạo transaction repository hỗ trợ lưu, tìm theo transaction ID và tìm charge `PENDING` theo payment. Bằng chứng: repository test trên PostgreSQL.
-- [x] **VN-07** — Tạo và lưu charge transaction trước khi dựng checkout URL để có merchant reference duy nhất. Bằng chứng: [`PaymentServiceTest.java`](../../src/test/java/com/thanh/payment/application/service/PaymentServiceTest.java) xác nhận `vnp_TxnRef == Transaction.id`.
+- [x] **VN-07** — Tạo và lưu charge transaction trước khi dựng checkout URL để có merchant reference duy nhất. Bằng chứng: [`PaymentServiceTest.java`](../../src/test/java/com/thanh/payment/application/PaymentServiceTest.java) xác nhận `vnp_TxnRef == Transaction.id`.
 - [ ] **VN-08** — Success/failure callback cập nhật `Payment` và `Transaction` trong cùng database transaction; lỗi persistence rollback cả hai. Bằng chứng: integration test.
 - [ ] **VN-09** — Request lặp cho order đang pending tái sử dụng charge chưa hết hạn, không tạo transaction hoặc checkout attempt thứ hai. Bằng chứng: duplicate/concurrency service test.
 
@@ -58,19 +58,19 @@
 
 ## 1:45–2:45 — Provider contract và cấu hình (0/4)
 
-- [x] **VN-10** — Contract create dùng typed request/result và normalized `PENDING`. Bằng chứng: [`ProviderCheckoutRequest.java`](../../src/main/java/com/thanh/payment/application/port/out/ProviderCheckoutRequest.java), [`ProviderCheckoutResult.java`](../../src/main/java/com/thanh/payment/application/port/out/ProviderCheckoutResult.java).
-- [x] **VN-11** — `PaymentResponse` trả `transactionId`, `checkoutUrl`, `expiresAt` mà không lộ provider secret. Bằng chứng: [`PaymentControllerTest.java`](../../src/test/java/com/thanh/payment/presentation/controller/PaymentControllerTest.java), [`PaymentServiceTest.java`](../../src/test/java/com/thanh/payment/application/service/PaymentServiceTest.java).
-- [x] **VN-12** — Validated VNPay properties fail khi enable với URL/credential/version/expiry sai. Bằng chứng: [`VnpayPropertiesTest.java`](../../src/test/java/com/thanh/payment/adapter/out/provider/config/VnpayPropertiesTest.java).
-- [x] **VN-13** — `TmnCode`/secret lấy từ environment; provider khác bị từ chối trước persistence. Bằng chứng: profile staging/production và negative test trong [`PaymentServiceTest.java`](../../src/test/java/com/thanh/payment/application/service/PaymentServiceTest.java).
+- [x] **VN-10** — Contract create dùng typed request/result và normalized `PENDING`. Bằng chứng: [`ProviderCheckoutRequest.java`](../../src/main/java/com/thanh/payment/application/provider/ProviderCheckoutRequest.java), [`ProviderCheckoutResult.java`](../../src/main/java/com/thanh/payment/application/provider/ProviderCheckoutResult.java).
+- [x] **VN-11** — `PaymentResponse` trả `transactionId`, `checkoutUrl`, `expiresAt` mà không lộ provider secret. Bằng chứng: [`PaymentControllerTest.java`](../../src/test/java/com/thanh/payment/api/PaymentControllerTest.java), [`PaymentServiceTest.java`](../../src/test/java/com/thanh/payment/application/PaymentServiceTest.java).
+- [x] **VN-12** — Validated VNPay properties fail khi enable với URL/credential/version/expiry sai. Bằng chứng: [`VnpayPropertiesTest.java`](../../src/test/java/com/thanh/payment/infrastructure/provider/vnpay/VnpayPropertiesTest.java).
+- [x] **VN-13** — `TmnCode`/secret lấy từ environment; provider khác bị từ chối trước persistence. Bằng chứng: profile staging/production và negative test trong [`PaymentServiceTest.java`](../../src/test/java/com/thanh/payment/application/PaymentServiceTest.java).
 
 **Exit gate:** Controller nhận typed checkout result; không thể tạo payment bằng adapter chưa sẵn sàng.
 
 ## 2:45–4:15 — Checkout URL (0/6)
 
 - [ ] **VN-14** — Chỉ chấp nhận VND nguyên, tối thiểu 5.000 VND và không vượt giới hạn `vnp_Amount`; validation xảy ra trước khi ghi database. Bằng chứng: boundary tests. [VNPay xác nhận VND và mức tối thiểu](https://sandbox.vnpayment.vn/apis/docs/faqs/).
-- [x] **VN-15** — URL chứa đủ các tham số PAY 2.1.0 bắt buộc. Bằng chứng: exact fixture trong [`VnpayAdapterTest.java`](../../src/test/java/com/thanh/payment/adapter/out/provider/VnpayAdapterTest.java).
+- [x] **VN-15** — URL chứa đủ các tham số PAY 2.1.0 bắt buộc. Bằng chứng: exact fixture trong [`VnpayAdapterTest.java`](../../src/test/java/com/thanh/payment/infrastructure/provider/vnpay/VnpayAdapterTest.java).
 - [x] **VN-16** — Amount ×100, GMT+7 và expiry 15 phút được kiểm tra bằng fixed timestamps trong golden fixture.
-- [x] **VN-17** — Parameters được sort/encode và ký HMAC-SHA512; không gửi `vnp_SecureHashType`. Bằng chứng: golden hash trong [`VnpayAdapterTest.java`](../../src/test/java/com/thanh/payment/adapter/out/provider/VnpayAdapterTest.java).
+- [x] **VN-17** — Parameters được sort/encode và ký HMAC-SHA512; không gửi `vnp_SecureHashType`. Bằng chứng: golden hash trong [`VnpayAdapterTest.java`](../../src/test/java/com/thanh/payment/infrastructure/provider/vnpay/VnpayAdapterTest.java).
 - [ ] **VN-18** — Dùng injected `Clock`; client IP lấy server-side và không tin forwarded header nếu trusted proxy chưa cấu hình. Bằng chứng: deterministic unit/MVC tests.
 - [ ] **VN-19** — Return URL chỉ phục vụ UX, không cập nhật payment; log không chứa hash secret/signature hoặc full checkout URL nhạy cảm. Bằng chứng: code review và log-capture test.
 
@@ -79,9 +79,9 @@
 ## 4:15–5:45 — IPN (0/7)
 
 - [ ] **VN-20** — `GET /api/v1/payments/webhook/vnpay` nhận toàn bộ raw query parameters; loại `vnp_SecureHash` và `vnp_SecureHashType` trước khi canonicalize. Bằng chứng: controller/adapter test có trường mở rộng.
-- [x] **VN-21** — Recompute HMAC-SHA512 và so sánh constant-time; thiếu/sai signature bị từ chối trước processor database. Bằng chứng: [`VnpayIpnVerifierTest.java`](../../src/test/java/com/thanh/payment/adapter/out/provider/VnpayIpnVerifierTest.java), [`VnpayIpnServiceTest.java`](../../src/test/java/com/thanh/payment/application/service/VnpayIpnServiceTest.java).
+- [x] **VN-21** — Recompute HMAC-SHA512 và so sánh constant-time; thiếu/sai signature bị từ chối trước processor database. Bằng chứng: [`VnpayIpnVerifierTest.java`](../../src/test/java/com/thanh/payment/infrastructure/provider/vnpay/VnpayIpnVerifierTest.java), [`VnpayIpnServiceTest.java`](../../src/test/java/com/thanh/payment/application/VnpayIpnServiceTest.java).
 - [ ] **VN-22** — Đối chiếu TmnCode, transaction reference, payment method, stored VND amount ×100 và trạng thái trước update. Bằng chứng: mismatch matrix tests.
-- [x] **VN-23** — Chỉ cặp `00/00` là success; review/expired/declined/unknown được mapping tường minh. Bằng chứng: [`VnpayIpnProcessorTest.java`](../../src/test/java/com/thanh/payment/application/service/VnpayIpnProcessorTest.java).
+- [x] **VN-23** — Chỉ cặp `00/00` là success; review/expired/declined/unknown được mapping tường minh. Bằng chứng: [`VnpayIpnProcessorTest.java`](../../src/test/java/com/thanh/payment/application/VnpayIpnProcessorTest.java).
 - [ ] **VN-24** — Lưu `vnp_TransactionNo` vào transaction và failure code/reason khi giao dịch không thành công. Bằng chứng: persistence assertions.
 - [ ] **VN-25** — Luôn trả HTTP 200 với JSON đúng: `00` processed, `02` already confirmed, `01` not found, `04` amount mismatch, `97` invalid signature, `99` unexpected/input error. Bằng chứng: MVC contract tests. [Quy ước IPN chính thức](https://sandbox.vnpayment.vn/apis/docs/thanh-toan-pay/pay.html).
 - [ ] **VN-26** — Callback lặp không thực hiện transition hoặc side effect lần hai và trả `02` khi giao dịch đã xác nhận. Bằng chứng: sequential và concurrent duplicate tests.

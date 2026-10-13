@@ -12,11 +12,11 @@ Bốn điểm **chặn** (P1–P4) phải xong trước khi cho merchant dùng. 
 
 | Thành phần | Mã nguồn |
 | --- | --- |
-| IPN | [`WebhookController.vnpayIpn`](../../src/main/java/com/thanh/payment/presentation/controller/WebhookController.java#L33) → [`VnpayIpnService`](../../src/main/java/com/thanh/payment/application/service/VnpayIpnService.java) → [`VnpayIpnVerifier`](../../src/main/java/com/thanh/payment/adapter/out/provider/VnpayIpnVerifier.java) → [`VnpayIpnProcessor`](../../src/main/java/com/thanh/payment/application/service/VnpayIpnProcessor.java) |
-| Return URL | [`WebhookController.vnpayReturn`](../../src/main/java/com/thanh/payment/presentation/controller/WebhookController.java#L39) |
-| Đối soát | [`VnpayReconciliationScheduler`](../../src/main/java/com/thanh/payment/infrastructure/config/VnpayReconciliationScheduler.java) → [`VnpayReconciliationService`](../../src/main/java/com/thanh/payment/application/service/VnpayReconciliationService.java) → [`VnpayReconciliationProcessor`](../../src/main/java/com/thanh/payment/application/service/VnpayReconciliationProcessor.java) |
+| IPN | [`WebhookController.vnpayIpn`](../../src/main/java/com/thanh/payment/api/WebhookController.java#L33) → [`VnpayIpnService`](../../src/main/java/com/thanh/payment/application/VnpayIpnService.java) → [`VnpayIpnVerifier`](../../src/main/java/com/thanh/payment/infrastructure/provider/vnpay/VnpayIpnVerifier.java) → [`VnpayIpnProcessor`](../../src/main/java/com/thanh/payment/application/VnpayIpnProcessor.java) |
+| Return URL | [`WebhookController.vnpayReturn`](../../src/main/java/com/thanh/payment/api/WebhookController.java#L39) |
+| Đối soát | [`VnpayReconciliationScheduler`](../../src/main/java/com/thanh/payment/infrastructure/job/VnpayReconciliationScheduler.java) → [`VnpayReconciliationService`](../../src/main/java/com/thanh/payment/application/VnpayReconciliationService.java) → [`VnpayReconciliationProcessor`](../../src/main/java/com/thanh/payment/application/VnpayReconciliationProcessor.java) |
 | Domain / schema | [`Payment`](../../src/main/java/com/thanh/payment/domain/model/Payment.java), [`Transaction`](../../src/main/java/com/thanh/payment/domain/model/Transaction.java), [`V1__payment_schema.sql`](../../src/main/resources/db/migration/V1__payment_schema.sql), [`V2__vnpay_reconciliation.sql`](../../src/main/resources/db/migration/V2__vnpay_reconciliation.sql) |
-| Đường cũ MoMo/bank | [`PaymentService.processTransaction` / `verifyWebhook`](../../src/main/java/com/thanh/payment/application/service/PaymentService.java#L177) |
+| Đường cũ MoMo/bank | [`PaymentService.processTransaction` / `verifyWebhook`](../../src/main/java/com/thanh/payment/application/PaymentService.java#L177) |
 | Test hiện có | `VnpayIpnProcessorTest` (10 case), `VnpayIpnServiceTest` (4), `WebhookControllerTest` (2), `VnpayIpnPersistenceIntegrationTest` (1), các test đối soát |
 
 ## 1. Những gì đã đạt
@@ -40,16 +40,16 @@ Bốn điểm **chặn** (P1–P4) phải xong trước khi cho merchant dùng. 
 | # | Mức | Vấn đề (bằng chứng) | Hệ quả |
 | --- | --- | --- | --- |
 | P1 | **Chặn** | Chưa chạy IPN/QueryDR thật với VNPay sandbox. Ý nghĩa mã `91` của QueryDR chưa được xác minh (roadmap M1). | Chưa có bằng chứng code khớp payload thật của VNPay. |
-| P2 | **Chặn** | [`PaymentController`](../../src/main/java/com/thanh/payment/presentation/controller/PaymentController.java#L39) chỉ có `POST`: không có `GET /api/v1/payments/{id}` hay `?orderId=`, cũng không có event hay callback cho merchant. | Hệ thống đơn hàng không biết payment đã `COMPLETED` nên không giao hàng được. |
-| P3 | **Chặn** | [`vnpayReturn`](../../src/main/java/com/thanh/payment/presentation/controller/WebhookController.java#L39) trả một chuỗi text cố định. | Khách thanh toán xong bị kẹt ở trang text, không quay lại site merchant. |
-| P4 | **Chặn** | Không có cách xử lý tay cho ba trường hợp: `REVIEW_REQUIRED`, giao dịch đối soát exhausted, và IPN thành công đến muộn ([chỉ log ERROR](../../src/main/java/com/thanh/payment/application/service/VnpayIpnProcessor.java#L85)). | [`uq_payments_order_id_active`](../../src/main/resources/db/migration/V1__payment_schema.sql#L14) tính cả `REVIEW_REQUIRED`, còn giao dịch exhausted vẫn `PENDING`, nên order bị khoá vĩnh viễn. Khách có thể đã bị trừ tiền mà không có hàng đợi nào để xử lý. |
-| C1 | Cao | [Vòng lặp scheduler](../../src/main/java/com/thanh/payment/infrastructure/config/VnpayReconciliationScheduler.java#L48) không bắt lỗi. `VnpayReconciliationService` chỉ bắt lỗi khi gọi mạng; lỗi trong `processor.apply` (DB lỗi, optimistic lock) ném thẳng ra ngoài. | Cả lô bị dừng. Một giao dịch lỗi đứng đầu lô chặn các giao dịch sau ở mọi chu kỳ. |
-| C2 | Cao | Nhánh [`INVALID_LOCAL_STATE`](../../src/main/java/com/thanh/payment/application/service/VnpayReconciliationProcessor.java#L51) return trước `recordReconciliationAttempt`, nên `next_reconciliation_at` không được dời. | Hàng đó bị chọn lại mãi ở đầu `ORDER BY next_reconciliation_at`. Chỉ cần đủ `batchSize` hàng như vậy là đối soát đứng hẳn. |
-| C3 | Cao | Chạy nhiều instance thì không có cơ chế giành quyền xử lý. Mỗi instance đọc cùng một danh sách ứng viên ([`findReconciliationCandidates`](../../src/main/java/com/thanh/payment/infrastructure/persistence/TransactionJpaRepository.java#L34)). | QueryDR bị gọi trùng. `reconciliation_attempts` bị cộng nhiều lần nên giao dịch exhausted sớm hơn cấu hình. |
+| P2 | **Chặn** | [`PaymentController`](../../src/main/java/com/thanh/payment/api/PaymentController.java#L39) chỉ có `POST`: không có `GET /api/v1/payments/{id}` hay `?orderId=`, cũng không có event hay callback cho merchant. | Hệ thống đơn hàng không biết payment đã `COMPLETED` nên không giao hàng được. |
+| P3 | **Chặn** | [`vnpayReturn`](../../src/main/java/com/thanh/payment/api/WebhookController.java#L39) trả một chuỗi text cố định. | Khách thanh toán xong bị kẹt ở trang text, không quay lại site merchant. |
+| P4 | **Chặn** | Không có cách xử lý tay cho ba trường hợp: `REVIEW_REQUIRED`, giao dịch đối soát exhausted, và IPN thành công đến muộn ([chỉ log ERROR](../../src/main/java/com/thanh/payment/application/VnpayIpnProcessor.java#L85)). | [`uq_payments_order_id_active`](../../src/main/resources/db/migration/V1__payment_schema.sql#L14) tính cả `REVIEW_REQUIRED`, còn giao dịch exhausted vẫn `PENDING`, nên order bị khoá vĩnh viễn. Khách có thể đã bị trừ tiền mà không có hàng đợi nào để xử lý. |
+| C1 | Cao | [Vòng lặp scheduler](../../src/main/java/com/thanh/payment/infrastructure/job/VnpayReconciliationScheduler.java#L48) không bắt lỗi. `VnpayReconciliationService` chỉ bắt lỗi khi gọi mạng; lỗi trong `processor.apply` (DB lỗi, optimistic lock) ném thẳng ra ngoài. | Cả lô bị dừng. Một giao dịch lỗi đứng đầu lô chặn các giao dịch sau ở mọi chu kỳ. |
+| C2 | Cao | Nhánh [`INVALID_LOCAL_STATE`](../../src/main/java/com/thanh/payment/application/VnpayReconciliationProcessor.java#L51) return trước `recordReconciliationAttempt`, nên `next_reconciliation_at` không được dời. | Hàng đó bị chọn lại mãi ở đầu `ORDER BY next_reconciliation_at`. Chỉ cần đủ `batchSize` hàng như vậy là đối soát đứng hẳn. |
+| C3 | Cao | Chạy nhiều instance thì không có cơ chế giành quyền xử lý. Mỗi instance đọc cùng một danh sách ứng viên ([`findReconciliationCandidates`](../../src/main/java/com/thanh/payment/domain/repository/TransactionRepository.java#L34)). | QueryDR bị gọi trùng. `reconciliation_attempts` bị cộng nhiều lần nên giao dịch exhausted sớm hơn cấu hình. |
 | C4 | Trung bình | Không lưu IPN thô (WEB-08). Chỉ có log. | Không có bằng chứng khi tranh chấp với khách hoặc VNPay, khó điều tra sự cố. |
 | C5 | Trung bình | [`paid_at` chưa bao giờ được gán](../../src/main/java/com/thanh/payment/domain/model/Transaction.java#L103). Không lưu `vnp_PayDate`, `vnp_BankCode`, `vnp_CardType`, `vnp_BankTranNo`. | Thiếu dữ liệu để đối soát kế toán với sao kê VNPay. |
 | C6 | Thấp | [`Transaction.mark*`](../../src/main/java/com/thanh/payment/domain/model/Transaction.java#L225) dùng `OffsetDateTime.now()` thay vì `Clock`. | `completed_at` không theo clock của service, khó viết test dùng thời gian cố định. |
-| C7 | Thấp | Đường cũ [`verifyWebhook` → `processTransaction`](../../src/main/java/com/thanh/payment/application/service/PaymentService.java#L219) và route [`/webhook/momo`, `/webhook/bank`](../../src/main/java/com/thanh/payment/presentation/controller/WebhookController.java#L46) vẫn mở. Đường này không kiểm số tiền, và `SecurityException`/`IllegalStateException` rơi vào `handleUnexpected` thành 500. | Bề mặt tấn công thừa, lỗi trả về sai contract. |
+| C7 | Thấp | Đường cũ [`verifyWebhook` → `processTransaction`](../../src/main/java/com/thanh/payment/application/PaymentService.java#L219) và route [`/webhook/momo`, `/webhook/bank`](../../src/main/java/com/thanh/payment/api/WebhookController.java#L46) vẫn mở. Đường này không kiểm số tiền, và `SecurityException`/`IllegalStateException` rơi vào `handleUnexpected` thành 500. | Bề mặt tấn công thừa, lỗi trả về sai contract. |
 | C8 | Thấp | `WebhookControllerTest` chỉ có 2 case. Chưa có contract MVC cho từng `RspCode`, chưa có test cô lập lỗi trong lô của scheduler, và IPN chưa chạy trên schema Flyway trong CI. | WEB-09/10/11 chưa đủ bằng chứng để tick. |
 | C9 | Thấp | Không có metric hay cảnh báo cho `RspCode`, kết quả đối soát, thành công muộn hoặc exhausted. | Sự cố về tiền chỉ lộ ra khi có người đọc log. |
 
@@ -71,7 +71,7 @@ Làm theo thứ tự giai đoạn. Mỗi giai đoạn kết thúc bằng `./mvnw
 5. **Đóng đường cũ (C7).**
    - Route `/webhook/momo` và `/webhook/bank`: provider tắt thì trả 404 qua `ApiException` (`PROVIDER_DISABLED`) trước khi parse body.
    - `SecurityException` đổi thành `ApiException` 401 `INVALID_SIGNATURE`.
-   - Ghi chú: xoá `processTransaction`/`ProcessTransactionUseCase` khi làm MoMo (M5).
+   - Ghi chú: xoá `processTransaction` khi làm MoMo (M5).
 6. **Test contract (C8).** Thêm vào `WebhookControllerTest` một case cho mỗi `RspCode` `00/01/02/04/97/99` (mock use case), kiểm tra HTTP 200 và JSON `{"RspCode","Message"}`.
 
 ### Giai đoạn 2: chạy thật trên sandbox (P1)
@@ -89,7 +89,7 @@ Lưu payload mẫu đã che chữ ký làm fixture cho test (PRV-06).
 
 1. **API truy vấn (P2).**
    - `GET /api/v1/payments/{paymentId}` và `GET /api/v1/payments?orderId=` trả `paymentId`, `orderId`, `status`, `amount`, `paidAt`, `providerTransactionId`, `failureReason`. Không trả `checkoutUrl` khi payment đã kết thúc.
-   - Thêm `GetPaymentUseCase`, method truy vấn trong `PaymentService` hoặc một service đọc riêng, cập nhật OpenAPI, viết test controller và service.
+   - Thêm method truy vấn trong `PaymentService` hoặc một service đọc riêng, cập nhật OpenAPI, viết test controller và service.
    - **Phụ thuộc SEC-03:** không có xác thực thì ai cũng đọc được trạng thái payment. Chỉ bật trên môi trường thật cùng lúc với xác thực merchant.
 2. **Return URL (P3).**
    - Verify chữ ký bằng `VnpayIpnVerifier`. Chỉ dùng để hiển thị, vẫn **không** đổi trạng thái.
