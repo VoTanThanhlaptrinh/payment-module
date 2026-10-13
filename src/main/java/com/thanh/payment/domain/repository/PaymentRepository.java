@@ -2,19 +2,22 @@ package com.thanh.payment.domain.repository;
 
 import com.thanh.payment.domain.model.Payment;
 import com.thanh.payment.domain.model.PaymentStatus;
+import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
-public interface PaymentRepository {
-    Payment save(Payment payment);
-
-    // Lưu rồi flush ngay xuống DB để vi phạm ràng buộc (vd unique 1 payment active/order) lộ ra tại chỗ và id TSID có sẵn.
-    Payment saveAndFlush(Payment payment);
-
-    Optional<Payment> findById(Long id);
+public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     Optional<Payment> findByOrderIdAndStatus(Long orderId, PaymentStatus status);
 
-    // Tìm payment "đang hoạt động" (PENDING hoặc REVIEW_REQUIRED) của một order. Dùng để từ chối tạo payment thứ hai.
-    Optional<Payment> findActiveByOrderId(Long orderId);
+    // Spring Data tự sinh: select ... where order_id=? and status in (...) fetch first 1 row.
+    Optional<Payment> findFirstByOrderIdAndStatusIn(Long orderId, Collection<PaymentStatus> statuses);
+
+    // Tìm payment "đang hoạt động" của một order để từ chối tạo payment thứ hai.
+    // Active = PENDING hoặc REVIEW_REQUIRED, khớp đúng điều kiện của unique index một phần uq_payments_order_id_active trong DB.
+    default Optional<Payment> findActiveByOrderId(Long orderId) {
+        return findFirstByOrderIdAndStatusIn(orderId, List.of(PaymentStatus.PENDING, PaymentStatus.REVIEW_REQUIRED));
+    }
 }

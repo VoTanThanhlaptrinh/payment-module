@@ -7,6 +7,8 @@ import com.thanh.payment.application.port.out.PaymentProvider;
 import com.thanh.payment.application.port.out.ProviderCheckoutRequest;
 import com.thanh.payment.application.port.out.ProviderCheckoutResult;
 import com.thanh.payment.application.port.out.ProviderCheckoutStatus;
+import com.thanh.payment.domain.exception.ActivePaymentExistsException;
+import com.thanh.payment.domain.exception.DuplicateIdempotencyKeyException;
 import com.thanh.payment.domain.model.IdempotencyKey;
 import com.thanh.payment.domain.model.Payment;
 import com.thanh.payment.domain.model.PaymentMethodType;
@@ -17,6 +19,7 @@ import com.thanh.payment.domain.repository.PaymentRepository;
 import com.thanh.payment.domain.repository.TransactionRepository;
 import com.thanh.payment.domain.valueobject.Currency;
 import com.thanh.payment.domain.valueobject.Money;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,13 +27,16 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
@@ -75,7 +81,7 @@ class PaymentCreatorTest {
         order.verify(paymentRepository).saveAndFlush(any(Payment.class));
         order.verify(idempotencyKeyRepository).save(key.getValue());
         assertEquals(1L, key.getValue().getPaymentId());
-        verify(idempotencyKeyRepository, never()).find(any(), any());
+        verify(idempotencyKeyRepository, never()).findByScopeAndKeyHash(any(), any());
         verify(paymentRepository, never()).findActiveByOrderId(any());
     }
 
@@ -83,7 +89,7 @@ class PaymentCreatorTest {
     void shouldReplayStoredPaymentWhenKeyExistsWithSameRequest() {
         IdempotencyKey key = IdempotencyKey.start("key-hash", "req-hash", NOW.plusHours(1));
         key.complete(7L);
-        when(idempotencyKeyRepository.find(IdempotencyKey.CREATE_PAYMENT_SCOPE, "key-hash")).thenReturn(Optional.of(key));
+        when(idempotencyKeyRepository.findByScopeAndKeyHash(IdempotencyKey.CREATE_PAYMENT_SCOPE, "key-hash")).thenReturn(Optional.of(key));
         Payment payment = new Payment(7L, 101L, Money.vnd(5_000), PaymentMethodType.VNPAY);
         Transaction transaction = new Transaction(70L, 7L, Money.vnd(5_000), TransactionType.CHARGE, NOW.plusMinutes(15));
         transaction.attachCheckout("https://sandbox.vnpayment.vn/same-url", NOW.plusMinutes(15));
@@ -101,7 +107,7 @@ class PaymentCreatorTest {
     void shouldRejectStoredKeyUsedWithDifferentRequest() {
         IdempotencyKey key = IdempotencyKey.start("key-hash", "other-hash", NOW.plusHours(1));
         key.complete(7L);
-        when(idempotencyKeyRepository.find(IdempotencyKey.CREATE_PAYMENT_SCOPE, "key-hash")).thenReturn(Optional.of(key));
+        when(idempotencyKeyRepository.findByScopeAndKeyHash(IdempotencyKey.CREATE_PAYMENT_SCOPE, "key-hash")).thenReturn(Optional.of(key));
 
         ApiException exception = assertThrows(ApiException.class,
                 () -> creator.replayOrRestart(command(5_000), provider, "key-hash", "req-hash", NOW));
@@ -113,7 +119,7 @@ class PaymentCreatorTest {
     void shouldRestartExpiredKeyAndCreateNewPayment() {
         IdempotencyKey expired = IdempotencyKey.start("key-hash", "old-hash", NOW.minusHours(1));
         expired.complete(3L);
-        when(idempotencyKeyRepository.find(IdempotencyKey.CREATE_PAYMENT_SCOPE, "key-hash")).thenReturn(Optional.of(expired));
+        when(idempotencyKeyRepository.findByScopeAndKeyHash(IdempotencyKey.CREATE_PAYMENT_SCOPE, "key-hash")).thenReturn(Optional.of(expired));
         givenPersistedPaymentAndTransaction();
 
         PaymentResponse response = creator.replayOrRestart(command(5_000), provider, "key-hash", "req-hash", NOW);
@@ -161,6 +167,38 @@ class PaymentCreatorTest {
         ArgumentCaptor<ProviderCheckoutRequest> request = ArgumentCaptor.forClass(ProviderCheckoutRequest.class);
         verify(provider).processPayment(request.capture());
         assertEquals(NOW.plusMinutes(30), request.getValue().getExpiresAt());
+    }
+
+    @Test
+    void shouldTranslateIdempotencyKeyUniqueViolation() {
+        when(idempotencyKeyRepository.saveAndFlush(any())).thenThrow(violation("uq_idempotency_scope_key"));
+
+        assertThrows(DuplicateIdempotencyKeyException.class,
+                () -> creator.create(command(5_000), provider, "key-hash", "req-hash", NOW));
+        verify(paymentRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void shouldTranslateActivePaymentUniqueViolation() {
+        when(paymentRepository.saveAndFlush(any())).thenThrow(violation("uq_payments_order_id_active"));
+
+        assertThrows(ActivePaymentExistsException.class,
+                () -> creator.create(command(5_000), provider, "key-hash", "req-hash", NOW));
+        verify(transactionRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void shouldRethrowOtherConstraintViolationsUnchanged() {
+        DataIntegrityViolationException other = violation("fk_transactions_payment");
+        when(paymentRepository.saveAndFlush(any())).thenThrow(other);
+
+        assertSame(other, assertThrows(DataIntegrityViolationException.class,
+                () -> creator.create(command(5_000), provider, "key-hash", "req-hash", NOW)));
+    }
+
+    private static DataIntegrityViolationException violation(String constraintName) {
+        return new DataIntegrityViolationException("could not execute statement",
+                new ConstraintViolationException("duplicate key", new SQLException("duplicate key"), constraintName));
     }
 
     private void givenPersistedPaymentAndTransaction() {

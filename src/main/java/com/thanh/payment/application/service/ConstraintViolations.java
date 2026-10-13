@@ -1,4 +1,4 @@
-package com.thanh.payment.infrastructure.persistence;
+package com.thanh.payment.application.service;
 
 import org.hibernate.exception.ConstraintViolationException;
 

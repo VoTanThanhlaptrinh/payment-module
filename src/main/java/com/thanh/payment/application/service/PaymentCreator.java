@@ -7,6 +7,8 @@ import com.thanh.payment.application.mapper.PaymentMapper;
 import com.thanh.payment.application.port.out.PaymentProvider;
 import com.thanh.payment.application.port.out.ProviderCheckoutRequest;
 import com.thanh.payment.application.port.out.ProviderCheckoutResult;
+import com.thanh.payment.domain.exception.ActivePaymentExistsException;
+import com.thanh.payment.domain.exception.DuplicateIdempotencyKeyException;
 import com.thanh.payment.domain.model.IdempotencyKey;
 import com.thanh.payment.domain.model.IdempotencyState;
 import com.thanh.payment.domain.model.Payment;
@@ -16,6 +18,7 @@ import com.thanh.payment.domain.repository.PaymentRepository;
 import com.thanh.payment.domain.repository.TransactionRepository;
 import com.thanh.payment.domain.valueobject.Money;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,7 +32,7 @@ import java.time.OffsetDateTime;
  * Chống trùng ở đây dựa vào unique của DB: INSERT luôn, không SELECT trước.
  *   - uq_idempotency_scope_key   : một Idempotency-Key chỉ có một dòng.
  *   - uq_payments_order_id_active: một order chỉ có một payment PENDING/REVIEW_REQUIRED.
- * Vi phạm unique làm hàm ném DataIntegrityViolationException và rollback toàn bộ; PaymentService quyết định xử lý tiếp.
+ * Vi phạm unique được dịch thành DuplicateIdempotencyKeyException / ActivePaymentExistsException và rollback toàn bộ; PaymentService quyết định xử lý tiếp.
  */
 @Service
 @RequiredArgsConstructor
@@ -56,7 +59,7 @@ public class PaymentCreator {
     @Transactional(timeoutString = "${payment.idempotency.max-processing-time-seconds:10}")
     public PaymentResponse replayOrRestart(CreatePaymentCommand command, PaymentProvider provider,
                                            String keyHash, String requestHash, OffsetDateTime now) {
-        IdempotencyKey key = idempotencyKeyRepository.find(IdempotencyKey.CREATE_PAYMENT_SCOPE, keyHash)
+        IdempotencyKey key = idempotencyKeyRepository.findByScopeAndKeyHash(IdempotencyKey.CREATE_PAYMENT_SCOPE, keyHash)
                 .orElseThrow(() -> new IllegalStateException("Idempotency key violated a unique constraint but was not found"));
         if (!key.isExpired(now)) {
             return replay(key, requestHash);
@@ -100,13 +103,12 @@ public class PaymentCreator {
                                     IdempotencyKey key, OffsetDateTime now) {
         // Bước 1: ghi/khoá key TRƯỚC (IN_PROGRESS, chưa có payment_id). Nếu một transaction khác đang giữ cùng key chưa commit,
         // Postgres bắt câu này chờ rồi báo trùng, nên request lặp lại luôn nhận kết quả cũ thay vì đụng unique của order.
-        idempotencyKeyRepository.saveAndFlush(key);
+        saveKey(key);
 
         // Money chuẩn hoá số tiền (scale 4) và loại tiền.
         Money amount = Money.of(command.getAmount(), command.getCurrency());
         // saveAndFlush: INSERT ngay để id TSID có sẵn và uq_payments_order_id_active (nếu bị vi phạm) nổ tại đây.
-        Payment payment = paymentRepository.saveAndFlush(
-                Payment.create(command.getOrderId(), amount, command.getMethod()));
+        Payment payment = savePayment(Payment.create(command.getOrderId(), amount, command.getMethod()));
         if (payment.getId() == null) {
             throw new IllegalStateException("Payment ID was not generated before transaction creation");
         }
@@ -142,5 +144,29 @@ public class PaymentCreator {
         key.complete(payment.getId());
         idempotencyKeyRepository.save(key);
         return PaymentMapper.toResponseDTO(payment, checkout);
+    }
+
+    // saveAndFlush để vi phạm unique (scope, key_hash) nổ tại đây chứ không đợi COMMIT, rồi dịch lỗi DB thành lỗi domain để PaymentService không phải biết tên ràng buộc.
+    private void saveKey(IdempotencyKey key) {
+        try {
+            idempotencyKeyRepository.saveAndFlush(key);
+        } catch (DataIntegrityViolationException exception) {
+            if (ConstraintViolations.violates(exception, "uq_idempotency_scope_key")) {
+                throw new DuplicateIdempotencyKeyException(exception);
+            }
+            throw exception;
+        }
+    }
+
+    // uq_payments_order_id_active: order đã có payment PENDING/REVIEW_REQUIRED.
+    private Payment savePayment(Payment payment) {
+        try {
+            return paymentRepository.saveAndFlush(payment);
+        } catch (DataIntegrityViolationException exception) {
+            if (ConstraintViolations.violates(exception, "uq_payments_order_id_active")) {
+                throw new ActivePaymentExistsException(exception);
+            }
+            throw exception;
+        }
     }
 }
