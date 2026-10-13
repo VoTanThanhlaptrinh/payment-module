@@ -4,7 +4,7 @@ import com.thanh.payment.application.provider.PaymentProvider;
 import com.thanh.payment.application.provider.ProviderCheckoutRequest;
 import com.thanh.payment.application.provider.ProviderCheckoutResult;
 import com.thanh.payment.application.provider.ProviderCheckoutStatus;
-import com.thanh.payment.domain.model.PaymentMethodType;
+import com.thanh.payment.domain.enums.PaymentMethodType;
 import com.thanh.payment.domain.valueobject.Currency;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

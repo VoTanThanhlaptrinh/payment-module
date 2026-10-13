@@ -1,4 +1,4 @@
-package com.thanh.payment.domain.model;
+package com.thanh.payment.domain.enums;
 
 public enum IdempotencyState {
     // Request đang được xử lý (đã giữ khoá, chưa tạo xong payment).

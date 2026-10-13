@@ -4,8 +4,8 @@ import com.thanh.payment.shared.exception.ApiException;
 import com.thanh.payment.application.provider.ProviderCheckoutRequest;
 import com.thanh.payment.application.provider.ProviderCheckoutResult;
 import com.thanh.payment.application.provider.ProviderCheckoutStatus;
-import com.thanh.payment.application.provider.ProviderOrderCodeGenerator;
-import com.thanh.payment.domain.model.PaymentMethodType;
+import com.thanh.payment.infrastructure.persistence.SequenceProviderOrderCodeGenerator;
+import com.thanh.payment.domain.enums.PaymentMethodType;
 import com.thanh.payment.domain.valueobject.Money;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
@@ -52,7 +54,8 @@ class PayosAdapterTest {
         properties.setCancelUrl("https://merchant.test/cancel");
         RestClient.Builder builder = RestClient.builder().baseUrl(properties.getApiUrl());
         server = MockRestServiceServer.bindTo(builder).build();
-        ProviderOrderCodeGenerator codes = () -> ORDER_CODE;
+        SequenceProviderOrderCodeGenerator codes = mock(SequenceProviderOrderCodeGenerator.class);
+        when(codes.next()).thenReturn(ORDER_CODE);
         adapter = new PayosAdapter(properties, new PayosSignatureService(properties), codes, builder.build());
     }
 

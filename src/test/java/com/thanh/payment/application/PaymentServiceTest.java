@@ -1,5 +1,6 @@
 package com.thanh.payment.application;
 
+import com.thanh.payment.infrastructure.cache.RedisIdempotencyStore;
 import com.thanh.payment.application.command.CreatePaymentCommand;
 import com.thanh.payment.api.dto.PaymentResponse;
 import com.thanh.payment.application.provider.PaymentVerificationResult;
@@ -8,7 +9,7 @@ import com.thanh.payment.shared.exception.ApiException;
 import com.thanh.payment.application.provider.PaymentProvider;
 import com.thanh.payment.domain.exception.ActivePaymentExistsException;
 import com.thanh.payment.domain.exception.DuplicateIdempotencyKeyException;
-import com.thanh.payment.domain.model.PaymentMethodType;
+import com.thanh.payment.domain.enums.PaymentMethodType;
 import com.thanh.payment.domain.repository.PaymentRepository;
 import com.thanh.payment.domain.repository.TransactionRepository;
 import com.thanh.payment.domain.valueobject.Currency;
@@ -49,7 +50,7 @@ class PaymentServiceTest {
     @Mock PaymentProviderFactory paymentProviderFactory;
     @Mock WebhookVerifierFactory webhookVerifierFactory;
     @Mock PaymentProvider provider;
-    @Mock IdempotencyStore store;
+    @Mock RedisIdempotencyStore store;
 
     private PaymentService service;
 

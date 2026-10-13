@@ -2,8 +2,8 @@ package com.thanh.payment.infrastructure.job;
 
 import com.thanh.payment.infrastructure.provider.vnpay.VnpayProperties;
 import com.thanh.payment.application.VnpayReconciliationService;
+import com.thanh.payment.domain.enums.TransactionType;
 import com.thanh.payment.domain.model.Transaction;
-import com.thanh.payment.domain.model.TransactionType;
 import com.thanh.payment.domain.repository.TransactionRepository;
 import com.thanh.payment.domain.valueobject.Money;
 import org.junit.jupiter.api.Test;

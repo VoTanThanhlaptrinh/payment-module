@@ -3,7 +3,7 @@ package com.thanh.payment.infrastructure.provider.momo;
 import com.thanh.payment.application.provider.PaymentVerificationResult;
 import com.thanh.payment.application.provider.PaymentProvider;
 import com.thanh.payment.application.provider.WebhookVerifier;
-import com.thanh.payment.domain.model.PaymentMethodType;
+import com.thanh.payment.domain.enums.PaymentMethodType;
 import org.springframework.stereotype.Component;
 
 import com.thanh.payment.application.provider.ProviderCheckoutRequest;

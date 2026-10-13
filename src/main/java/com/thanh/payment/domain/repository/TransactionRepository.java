@@ -1,8 +1,8 @@
 package com.thanh.payment.domain.repository;
 
+import com.thanh.payment.domain.enums.TransactionStatus;
+import com.thanh.payment.domain.enums.TransactionType;
 import com.thanh.payment.domain.model.Transaction;
-import com.thanh.payment.domain.model.TransactionStatus;
-import com.thanh.payment.domain.model.TransactionType;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;

@@ -2,12 +2,12 @@ package com.thanh.payment.application;
 
 import com.thanh.payment.api.dto.webhook.VnpayIpnData;
 import com.thanh.payment.api.dto.webhook.VnpayIpnResponse;
+import com.thanh.payment.domain.enums.PaymentMethodType;
+import com.thanh.payment.domain.enums.PaymentStatus;
+import com.thanh.payment.domain.enums.TransactionStatus;
+import com.thanh.payment.domain.enums.TransactionType;
 import com.thanh.payment.domain.model.Payment;
-import com.thanh.payment.domain.model.PaymentMethodType;
-import com.thanh.payment.domain.model.PaymentStatus;
 import com.thanh.payment.domain.model.Transaction;
-import com.thanh.payment.domain.model.TransactionStatus;
-import com.thanh.payment.domain.model.TransactionType;
 import com.thanh.payment.domain.repository.PaymentRepository;
 import com.thanh.payment.domain.repository.TransactionRepository;
 import com.thanh.payment.domain.valueobject.Money;

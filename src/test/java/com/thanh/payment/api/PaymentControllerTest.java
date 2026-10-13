@@ -2,8 +2,8 @@ package com.thanh.payment.api;
 
 import com.thanh.payment.api.dto.PaymentResponse;
 import com.thanh.payment.application.PaymentService;
-import com.thanh.payment.domain.model.PaymentMethodType;
-import com.thanh.payment.domain.model.PaymentStatus;
+import com.thanh.payment.domain.enums.PaymentMethodType;
+import com.thanh.payment.domain.enums.PaymentStatus;
 import com.thanh.payment.domain.valueobject.Currency;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

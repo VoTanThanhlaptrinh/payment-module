@@ -1,7 +1,7 @@
 package com.thanh.payment.domain.repository;
 
+import com.thanh.payment.domain.enums.PaymentStatus;
 import com.thanh.payment.domain.model.Payment;
-import com.thanh.payment.domain.model.PaymentStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Collection;

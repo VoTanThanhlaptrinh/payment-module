@@ -1,7 +1,7 @@
 package com.thanh.payment.api.dto;
 
-import com.thanh.payment.domain.model.PaymentMethodType;
-import com.thanh.payment.domain.model.PaymentStatus;
+import com.thanh.payment.domain.enums.PaymentMethodType;
+import com.thanh.payment.domain.enums.PaymentStatus;
 import com.thanh.payment.domain.valueobject.Currency;
 import lombok.Builder;
 import lombok.Getter;

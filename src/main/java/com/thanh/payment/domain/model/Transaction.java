@@ -1,5 +1,7 @@
 package com.thanh.payment.domain.model;
 
+import com.thanh.payment.domain.enums.TransactionStatus;
+import com.thanh.payment.domain.enums.TransactionType;
 import com.thanh.payment.domain.valueobject.Money;
 import io.hypersistence.utils.hibernate.id.Tsid;
 import jakarta.persistence.AttributeOverride;

@@ -6,7 +6,7 @@ This is a Java 17 Spring Boot payment service built with Maven. Production code 
 
 - `api/`: REST controllers, the exception handler, request/response DTOs (`api/dto`) and webhook payloads (`api/dto/webhook`).
 - `application/`: concrete service classes, commands, and the provider strategy interfaces (`application/provider`).
-- `domain/`: payment and transaction models, value objects, and Spring Data repository interfaces (`domain/repository`).
+- `domain/`: payment and transaction models, enums (`domain/enums`), value objects, and Spring Data repository interfaces (`domain/repository`).
 - `mapper/`, `shared/exception/`: entity/DTO mapping and the shared `ApiException`.
 - `infrastructure/provider/<name>/`: one package per provider (VNPay, payOS, MoMo, bank).
 - `infrastructure/{cache,persistence,job,config}/`: Redis idempotency store, sequence generator, schedulers, and configuration.

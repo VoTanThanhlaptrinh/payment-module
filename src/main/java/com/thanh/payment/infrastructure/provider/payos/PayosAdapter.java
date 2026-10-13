@@ -5,8 +5,8 @@ import com.thanh.payment.application.provider.PaymentProvider;
 import com.thanh.payment.application.provider.ProviderCheckoutRequest;
 import com.thanh.payment.application.provider.ProviderCheckoutResult;
 import com.thanh.payment.application.provider.ProviderCheckoutStatus;
-import com.thanh.payment.application.provider.ProviderOrderCodeGenerator;
-import com.thanh.payment.domain.model.PaymentMethodType;
+import com.thanh.payment.infrastructure.persistence.SequenceProviderOrderCodeGenerator;
+import com.thanh.payment.domain.enums.PaymentMethodType;
 import com.thanh.payment.domain.valueobject.Currency;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,18 +39,18 @@ public class PayosAdapter implements PaymentProvider {
 
     private final PayosProperties properties;
     private final PayosSignatureService signatureService;
-    private final ProviderOrderCodeGenerator orderCodeGenerator;
+    private final SequenceProviderOrderCodeGenerator orderCodeGenerator;
     private final RestClient restClient;
 
     @Autowired
     public PayosAdapter(PayosProperties properties, PayosSignatureService signatureService,
-                        ProviderOrderCodeGenerator orderCodeGenerator, RestClient.Builder restClientBuilder) {
+                        SequenceProviderOrderCodeGenerator orderCodeGenerator, RestClient.Builder restClientBuilder) {
         this(properties, signatureService, orderCodeGenerator, buildClient(properties, restClientBuilder));
     }
 
     // Cho test: truyền RestClient đã gắn MockRestServiceServer.
     PayosAdapter(PayosProperties properties, PayosSignatureService signatureService,
-                 ProviderOrderCodeGenerator orderCodeGenerator, RestClient restClient) {
+                 SequenceProviderOrderCodeGenerator orderCodeGenerator, RestClient restClient) {
         this.properties = properties;
         this.signatureService = signatureService;
         this.orderCodeGenerator = orderCodeGenerator;

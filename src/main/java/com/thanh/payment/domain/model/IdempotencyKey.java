@@ -1,5 +1,6 @@
 package com.thanh.payment.domain.model;
 
+import com.thanh.payment.domain.enums.IdempotencyState;
 import io.hypersistence.utils.hibernate.id.Tsid;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

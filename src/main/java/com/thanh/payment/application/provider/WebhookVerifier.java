@@ -1,6 +1,6 @@
 package com.thanh.payment.application.provider;
 
-import com.thanh.payment.domain.model.PaymentMethodType;
+import com.thanh.payment.domain.enums.PaymentMethodType;
 
 public interface WebhookVerifier {
     PaymentMethodType getSupportedType();

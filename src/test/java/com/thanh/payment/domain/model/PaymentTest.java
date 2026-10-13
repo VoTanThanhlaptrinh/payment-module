@@ -1,5 +1,7 @@
 package com.thanh.payment.domain.model;
 
+import com.thanh.payment.domain.enums.PaymentMethodType;
+import com.thanh.payment.domain.enums.PaymentStatus;
 import com.thanh.payment.domain.valueobject.Currency;
 import com.thanh.payment.domain.valueobject.Money;
 import org.junit.jupiter.api.DisplayName;

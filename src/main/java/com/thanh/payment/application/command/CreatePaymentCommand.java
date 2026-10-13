@@ -1,6 +1,6 @@
 package com.thanh.payment.application.command;
 
-import com.thanh.payment.domain.model.PaymentMethodType;
+import com.thanh.payment.domain.enums.PaymentMethodType;
 import com.thanh.payment.domain.valueobject.Currency;
 import lombok.Builder;
 import lombok.Getter;

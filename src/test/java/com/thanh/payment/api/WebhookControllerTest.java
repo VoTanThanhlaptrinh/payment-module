@@ -4,7 +4,7 @@ import com.thanh.payment.api.dto.webhook.VnpayIpnResponse;
 import com.thanh.payment.shared.exception.ApiException;
 import com.thanh.payment.application.PaymentService;
 import com.thanh.payment.application.VnpayIpnService;
-import com.thanh.payment.domain.model.PaymentMethodType;
+import com.thanh.payment.domain.enums.PaymentMethodType;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;

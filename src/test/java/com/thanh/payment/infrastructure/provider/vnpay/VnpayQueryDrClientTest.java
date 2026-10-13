@@ -2,8 +2,8 @@ package com.thanh.payment.infrastructure.provider.vnpay;
 
 import com.thanh.payment.application.provider.VnpayQueryDecision;
 import com.thanh.payment.application.provider.VnpayQueryResult;
+import com.thanh.payment.domain.enums.TransactionType;
 import com.thanh.payment.domain.model.Transaction;
-import com.thanh.payment.domain.model.TransactionType;
 import com.thanh.payment.domain.valueobject.Money;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

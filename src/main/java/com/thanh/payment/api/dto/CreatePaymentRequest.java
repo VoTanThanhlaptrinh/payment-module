@@ -1,7 +1,7 @@
 package com.thanh.payment.api.dto;
 
 import com.thanh.payment.application.command.CreatePaymentCommand;
-import com.thanh.payment.domain.model.PaymentMethodType;
+import com.thanh.payment.domain.enums.PaymentMethodType;
 import com.thanh.payment.domain.valueobject.Currency;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;

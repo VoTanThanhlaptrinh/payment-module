@@ -1,4 +1,4 @@
-package com.thanh.payment.domain.model;
+package com.thanh.payment.domain.enums;
 
 /**
  * Loại giao dịch của Transaction.

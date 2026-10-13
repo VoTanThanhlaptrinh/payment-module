@@ -1,9 +1,9 @@
 package com.thanh.payment.application;
 
 import com.thanh.payment.application.provider.VnpayQueryResult;
-import com.thanh.payment.application.provider.VnpayTransactionQuery;
+import com.thanh.payment.infrastructure.provider.vnpay.VnpayQueryDrClient;
+import com.thanh.payment.domain.enums.TransactionType;
 import com.thanh.payment.domain.model.Transaction;
-import com.thanh.payment.domain.model.TransactionType;
 import com.thanh.payment.domain.valueobject.Money;
 import org.junit.jupiter.api.Test;
 
@@ -16,7 +16,7 @@ class VnpayReconciliationServiceTest {
 
     @Test
     void shouldTurnTransportFailureIntoRetryAttempt() {
-        VnpayTransactionQuery query = mock(VnpayTransactionQuery.class);
+        VnpayQueryDrClient query = mock(VnpayQueryDrClient.class);
         VnpayReconciliationProcessor processor = mock(VnpayReconciliationProcessor.class);
         VnpayReconciliationService service = new VnpayReconciliationService(query, processor);
         Transaction transaction = new Transaction(

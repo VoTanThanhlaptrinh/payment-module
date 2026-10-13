@@ -1,7 +1,7 @@
 package com.thanh.payment.application;
 
 import com.thanh.payment.application.provider.WebhookVerifier;
-import com.thanh.payment.domain.model.PaymentMethodType;
+import com.thanh.payment.domain.enums.PaymentMethodType;
 import org.springframework.stereotype.Component;
 
 import java.util.List;

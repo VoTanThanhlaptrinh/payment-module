@@ -2,10 +2,10 @@ package com.thanh.payment.application;
 
 import com.thanh.payment.infrastructure.provider.vnpay.VnpayProperties;
 import com.thanh.payment.application.provider.VnpayQueryResult;
+import com.thanh.payment.domain.enums.PaymentMethodType;
+import com.thanh.payment.domain.enums.TransactionType;
 import com.thanh.payment.domain.model.Payment;
-import com.thanh.payment.domain.model.PaymentMethodType;
 import com.thanh.payment.domain.model.Transaction;
-import com.thanh.payment.domain.model.TransactionType;
 import com.thanh.payment.domain.repository.PaymentRepository;
 import com.thanh.payment.domain.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
