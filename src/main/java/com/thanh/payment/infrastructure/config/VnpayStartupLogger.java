@@ -1,6 +1,6 @@
 package com.thanh.payment.infrastructure.config;
 
-import com.thanh.payment.adapter.out.provider.config.VnpayProperties;
+import com.thanh.payment.infrastructure.provider.vnpay.VnpayProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;

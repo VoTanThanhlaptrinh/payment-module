@@ -1,11 +1,11 @@
 package com.thanh.payment.infrastructure.cache;
 
 import com.thanh.payment.TestcontainersConfiguration;
-import com.thanh.payment.application.port.out.IdempotencyStore;
-import com.thanh.payment.application.port.out.IdempotencyStore.Existing;
-import com.thanh.payment.application.port.out.IdempotencyStore.Reservation;
-import com.thanh.payment.application.port.out.IdempotencyStore.Reserved;
-import com.thanh.payment.application.port.out.IdempotencyStore.State;
+import com.thanh.payment.application.IdempotencyStore;
+import com.thanh.payment.application.IdempotencyStore.Existing;
+import com.thanh.payment.application.IdempotencyStore.Reservation;
+import com.thanh.payment.application.IdempotencyStore.Reserved;
+import com.thanh.payment.application.IdempotencyStore.State;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

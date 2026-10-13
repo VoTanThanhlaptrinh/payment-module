@@ -1,9 +1,9 @@
 package com.thanh.payment;
 
 import com.thanh.payment.application.command.CreatePaymentCommand;
-import com.thanh.payment.application.dto.PaymentResponse;
-import com.thanh.payment.application.exception.ApiException;
-import com.thanh.payment.application.service.PaymentService;
+import com.thanh.payment.api.dto.PaymentResponse;
+import com.thanh.payment.shared.exception.ApiException;
+import com.thanh.payment.application.PaymentService;
 import com.thanh.payment.domain.model.PaymentMethodType;
 import com.thanh.payment.domain.valueobject.Currency;
 import org.junit.jupiter.api.BeforeEach;

@@ -1,8 +1,8 @@
 package com.thanh.payment;
 
-import com.thanh.payment.application.dto.webhook.VnpayIpnData;
-import com.thanh.payment.application.dto.webhook.VnpayIpnResponse;
-import com.thanh.payment.application.service.VnpayIpnProcessor;
+import com.thanh.payment.api.dto.webhook.VnpayIpnData;
+import com.thanh.payment.api.dto.webhook.VnpayIpnResponse;
+import com.thanh.payment.application.VnpayIpnProcessor;
 import com.thanh.payment.domain.model.Payment;
 import com.thanh.payment.domain.model.PaymentMethodType;
 import com.thanh.payment.domain.model.PaymentStatus;

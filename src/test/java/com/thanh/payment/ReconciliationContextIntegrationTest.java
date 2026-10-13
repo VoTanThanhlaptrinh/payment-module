@@ -1,7 +1,7 @@
 package com.thanh.payment;
 
-import com.thanh.payment.adapter.out.provider.VnpayQueryDrClient;
-import com.thanh.payment.infrastructure.config.VnpayReconciliationScheduler;
+import com.thanh.payment.infrastructure.provider.vnpay.VnpayQueryDrClient;
+import com.thanh.payment.infrastructure.job.VnpayReconciliationScheduler;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

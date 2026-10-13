@@ -1,6 +1,6 @@
 package com.thanh.payment.infrastructure.persistence;
 
-import com.thanh.payment.application.port.out.ProviderOrderCodeGenerator;
+import com.thanh.payment.application.provider.ProviderOrderCodeGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
